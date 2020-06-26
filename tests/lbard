@@ -79,7 +79,7 @@ setup_bundles() {
 
 start_instances() {   
 
-   if [ x"$1" != "x"]; then
+   if [ "x$1" != "x"]; then
       fakeradios=$1
    else
       fakeradios=rfd900,rfd900,rfd900,rfd900
@@ -621,7 +621,7 @@ test_OneOneHF() {
    wait_until --timeout=600 all_bundles_received
 }
 
-doc=MeshMSViaHFWithOthers="A MeshMS conversation via HF, where both peers have a large number of bundles in common"
+doc_MeshMSViaHFWithOthers="A MeshMS conversation via HF, where both peers have a large number of bundles in common"
 setup_MeshMSViaHFWithOthers() {
    # 1500 files in common, 0 unique files per instance, 25% packet loss
    setup_bundles "0.25" 1500 0
