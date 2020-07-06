@@ -18,8 +18,8 @@ EGREP=egrep
 
 add_servald_interface() {
    local SOCKET_TYPE="dgram"
-   local INTERFACE="1"
-   #local TYPE="wifi"
+   local INTERFACE=""
+   local TYPE=""
 
    if [ $# -eq 0 ]; then
       error "No servald interfaces found for instance $instance_number."
@@ -46,12 +46,19 @@ add_servald_interface() {
          ;;
       *)
          INTERFACE="$1"
+         TYPE="wifi"
          shift
          ;;
       esac
    done
    echo "after it: $TYPE"
-   INTERFACE="1"
+   #INTERFACE="1"
+   echo "INTERFACE val: $INTERFACE"
+
+   if [ "x$INTERFACE" = "x" ]; then
+      # Set it to an /probably/ unused number. This prevents weird issues with interfaces accidentally matching when one is defined explicitly
+      INTERFACE="999$instance_number"
+   fi
 
    #    wifi     radio
    #    0        0
@@ -75,9 +82,14 @@ add_servald_interface() {
          set interfaces.$INTERFACE.type $TYPE \
          set interfaces.$INTERFACE.idle_tick_ms 500"
    fi
-   tfw_log "Servald config for instance: $instance_number: $testVar"
+   tfw_log "Servald config for instance: $instance_number($instance_name): $testVar"
 
    executeOk_servald config ${testVar}
+}
+
+configure_servald_server() {
+   tfw_log "Configuring servald instance: $instance_name with parameters: $@"
+   add_servald_interface "$1" "$2"
 }
 
 start_instances() {
@@ -111,7 +123,7 @@ start_instances() {
       elif [ "x$wifi_nodes" != x ]; then
          all_nodes=$(echo -e "${wifi_nodes}" | sort -u -)
       else
-         error "Unable to work out what interfaces are defined. Check your definitions."
+         tfw_log "WARNING: No interfaces defined. This may be fine if you're defining them later."
       fi
    fi
 
@@ -141,13 +153,9 @@ start_instances() {
       interfaceArray=("${interfaceArray[@]}" "$interfaces")
    done
 
-   #echo "interfaces: ${interfaceArray[@]}"
-
    for interface in "${interfaceArray[@]}"; do
       echo "Interface: $interface"
    done
-
-   ## TODO: For each instance, start_servald_server with the value of THAT INDEX of interfaceArray
 
    foreach_instance +A +B +C +D start_servald_server \${interfaceArray[@]}
 
@@ -177,6 +185,14 @@ start_instances() {
    fork_lbard_console "$addr_localhost:$PORTD" lbard:lbard "$SIDD" "$IDD" "$tty4" pull ${lbardflags}
 }
 
+teardown() {
+   stop_all_servald_servers
+   kill_all_servald_processes
+   assert_no_servald_processes
+   report_all_servald_servers
+}
+
+
 # Utility function for setting up a fixture with a servald server process:
 #  - start a servald server process
 #  - assert that the pidfile is created and correct
@@ -184,7 +200,9 @@ start_instances() {
 #  - assert that the reported PID is actually a running servald process
 start_servald_server() {
    push_instance
-   set_instance_fromarg "$1" && shift
+   # Instance fromarg is never set in /any/ of the tests written, Can we ignore it??
+   #echo "instance fromarg: $1"
+   #set_instance_fromarg "$1" && shift
 
    echo "interfaceArray 111: ${interfaceArray[@]}"
    echo "instance num: $instance_number : interface array is: ${interfaceArray[$instance_number - 1]}"
@@ -232,15 +250,4 @@ start_servald_server() {
    assert --message="servald log file $instance_servald_log is present" [ -r "$instance_servald_log" ]
    tfw_log "# Started servald server process $instance_name, pid=$servald_pid"
    pop_instance
-}
-
-lbard_console() {
-   local C="$instance_name"
-   executeOk --core-backtrace --timeout=600 --executable="lbard"  --stdout-file="${C}_LBARDOUT" --stderr-file="${C}_LBARDERR" $*
-   tfw_cat --stdout --stderr
-}
-
-fork_lbard_console() {
-   local C="$instance_name"
-   fork %lbard$C lbard_console "$*"
 }

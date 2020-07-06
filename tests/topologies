@@ -87,29 +87,15 @@ setup() {
 }
 
 
-
-configure_servald_server() {
-   # TODO: Pass two strings of what interfaces should be activated
-   echo "NEW CONFIGURE"
-   add_servald_interface "$1" "$2"
-}
-
-#teardown() {
-#   stop_all_servald_servers
-#   kill_all_servald_processes
-#   assert_no_servald_processes
-#   report_all_servald_servers
-#}
-
-
 doc_DualType="Test, can we get wifi/radio working together?"
 setup_DualType(){
    # No radio connection between 1(B) and 2(C)
-   
    lbardparams="allow between 0,1; allow between 2,3; deny all;"
-   wificonnections="1,2;"
 
-   setup 0 0 0 "\${lbardparams}" "\${wificonnections}"
+   setup 0 0 0 "\${lbardparams}"
+   # Connect 1(B) and 2(C) via a wifi interface of number 1
+   foreach_instance +B +C add_servald_interface 1
+
    # Insert a file to server A
    set_instance +A
    rhizome_add_file file1 50
@@ -121,11 +107,29 @@ test_DualType(){
    wait_until --timeout=60 dReceivedBundles
 }
 
+doc_multihop_wifi="Send a bundle between chain of wifi nodes"
+setup_multihop_wifi() {
+   lbardparams="deny all;"
+
+   setup 0 0 0 "\${lbardparams}"
+   assert_no_servald_processes
+   foreach_instance +A +B add_servald_interface 1
+   foreach_instance +B +C add_servald_interface 2
+   foreach_instance +C +D add_servald_interface 3
+   # Insert a file to server A
+   set_instance +A
+   rhizome_add_file file1 50
+}
+test_multihop_wifi() {
+   dReceivedBundles() {
+      bundle_received_by $BID:$VERSION +D
+   }
+   wait_until --timeout=60 dReceivedBundles
+}
 
 
 doc_OneOne="FAKE RADIO - RFD900 - A single very small bundle transfers to a single peer"
 setup_OneOne() {
-   # TODO: Not actually doing over fake radio right now. Not sure why
    lbardparams="allow between 0,1; deny all;"
    setup 0 0 0 "\${lbardparams}" 
    # Insert a file to server A

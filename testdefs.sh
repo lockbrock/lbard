@@ -27,6 +27,17 @@ source "$lbard_source_root/serval-dna/testdefs_rhizome.sh"
 
 EGREP=egrep
 
+lbard_console() {
+   local C="$instance_name"
+   executeOk --core-backtrace --timeout=600 --executable="lbard"  --stdout-file="${C}_LBARDOUT" --stderr-file="${C}_LBARDERR" $*
+   tfw_cat --stdout --stderr
+}
+
+fork_lbard_console() {
+   local C="$instance_name"
+   fork %lbard$C lbard_console "$*"
+}
+
 _tfw_assert_stdxxx_egrep() {
    local qual="$1"
    shift
