@@ -57,7 +57,6 @@ add_servald_interface() {
    fi
 
    testVar="
-      set log.console.level debug \
       set log.console.show_pid on \
       set log.console.show_time on \
       set debug.rhizome on \
@@ -74,7 +73,6 @@ add_servald_interface() {
       set debug.config on \
       set debug.mdprequests on \
       set debug.mdp_filter on \
-      set debug.verbose true \
       "
    # Setting the config /should/ append it, not reset it. Lets find out!
    if [ "$FAKE_RADIO" == "1" ]; then

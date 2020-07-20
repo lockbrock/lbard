@@ -179,4 +179,208 @@ test_One() {
    }
    wait_until all_bundles_received
 }
+
+doc_RFD900_Chain="100 byte bundle along chain of 10 UHF nodes"
+setup_RFD900_Chain(){
+   # Ooof long setup line..
+   setupN "+A +B +C +D +E +F +G +H +I +J"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 1,2; allow between 2,3; allow between 3,4; allow between 4,5; allow between 5,6; allow between 6,7; allow between 7,8; allow between 8,9; deny all;"
+   set_instance +A
+   rhizome_add_file file1 100
+}
+test_RFD900_Chain(){
+   j_received_bundle(){
+      bundle_received_by $BID:$VERSION +J
+   }
+   wait_until --timeout=180 j_received_bundle
+}
+
+doc_Wifi_RFD900_Chain="100 byte bundle along chain of 10 WIFI/UHF links"
+setup_Wifi_RFD900_Chain(){
+   # Ooof long setup line..
+   setupN "+A +B +C +D +E +F +G +H +I +J"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 2,3;  allow between 4,5; allow between 6,7; allow between 8,9; deny all;"
+   
+   foreach_instance +B +C add_servald_interface 1
+   foreach_instance +D +E add_servald_interface 2
+   foreach_instance +F +G add_servald_interface 3
+   foreach_instance +H +I add_servald_interface 4
+
+   set_instance +A
+   rhizome_add_file file1 100
+}
+test_Wifi_RFD900_Chain(){
+   j_received_bundle(){
+      bundle_received_by $BID:$VERSION +J
+   }
+   wait_until --timeout=180 j_received_bundle
+}
+
+setup_lab_topology(){
+   # Lab network topology, column on the right is the node ID
+   #  A(0)  :  Lab
+   #  B(1) :  8
+   #  C(2)  :  9
+   #  D(3)  :  10
+   #  E(4)  :  11
+   #  F(5)  :  A1
+   #  G(6)  :  A2
+   #  H(7) :  A3
+
+   setupN "+A +B +C +D +E +F +G +H"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 0,3; allow between 1,3; allow between 3,4; allow between 4,6; allow between 6,5;" 
+   foreach_instance +B +C add_servald_interface 1
+   foreach_instance +F +H add_servald_interface 2
+}
+
+doc_Lab_File="Send a file from the Lab(A) to A3(H)"
+setup_Lab_File(){
+   setup_lab_topology
+
+   set_instance +A
+   rhizome_add_file file1 100
+}
+test_Lab_File(){
+   all_received_bundle(){
+      bundle_received_by $BID:$VERSION +H
+   }
+   wait_until --timeout=180 all_received_bundle
+}
+
+two_way_conversation(){
+   # From lbard test file
+   if [ "x$1" != "x" ]; then
+	   maxwait=$1
+   else
+      maxwait=120
+   fi
+
+   if [ "x$2" != "x" ]; then
+      sender=$2
+   else
+      sender="B"
+   fi
+
+   if [ "x$3" != "x" ]; then
+      receiver=$3
+   else
+      receiver="A"
+   fi
+
+
+   eval tmp="\$\SID\$sender"; 
+   eval sender_sid=${tmp}
+
+   eval tmp="\$\SID\$receiver"; 
+   eval receiver_sid=${tmp}
+
+
+   # 1. empty list
+   set_instance "+$sender"
+   executeOk_servald meshms list messages $sender_sid $receiver_sid
+   assertStdoutIs --stdout --line=1 -e '6\n'
+   assertStdoutIs --stdout --line=2 -e '_id:my_offset:their_offset:age:type:message\n'
+   assertStdoutLineCount '==' 2
+
+   # 2. create a manifest with a single message, list it back and wait for delivery
+   set_instance "+$sender"
+   executeOk_servald meshms send message $sender_sid $receiver_sid "Hi"
+   executeOk_servald rhizome list
+   receives_first_message() {
+       set_instance "+$receiver"
+       executeOk_servald meshms list messages $receiver_sid $sender_sid
+       if ! grep ":<:Hi\$" $_tfw_tmp/stdout; then
+	   return 1
+       fi
+   }   
+   wait_until --timeout=$maxwait receives_first_message
+   
+   # 3. append a second message and list them both
+   set_instance "+$sender"
+   executeOk_servald meshms send message $sender_sid $receiver_sid "How are you"
+   executeOk_servald meshms list messages $sender_sid $receiver_sid
+   tfw_cat --stdout
+   assertStdoutGrep --stdout --matches=1 ":>:How are you\$"
+   assertStdoutGrep --stdout --matches=1 ":>:Hi\$"
+   assertStdoutLineCount '==' 4
+   
+   # 4. list the messages from the receivers point of view (which ACKs them)
+   receives_second_message() {
+       executeOk_servald meshms list messages $receiver_sid $sender_sid
+       tfw_cat --stdout
+       if ! egrep "^0:[0-9]+:[0-9]+:[0-9]+:<:How are you\$" $_tfw_tmp/stdout; then
+	   return 1
+       fi
+       if ! egrep "^1:[0-9]+:[0-9]+:[0-9]+:<:Hi\$" $_tfw_tmp/stdout; then
+	   return 1;
+       fi
+   }
+   set_instance "+$receiver"
+   wait_until --timeout=$maxwait receives_second_message
+   
+   CONV_BID=$(replayStderr | sed -n -e '/MESHMS CONVERSATION BUNDLE/s/.*bid=\([0-9A-F]*\).*/\1/p')
+   CONV_SECRET=$(replayStderr | sed -n -e '/MESHMS CONVERSATION BUNDLE/s/.*secret=\([0-9A-F]*\).*/\1/p')
+   tfw_log "CONV_BID=$CONV_BID CONV_SECRET=$CONV_SECRET"
+   
+   # 5. mark the first message as read
+   set_instance "+$receiver"
+   executeOk_servald meshms read messages $receiver_sid $sender_sid 5
+   tfw_cat --stderr
+   executeOk_servald meshms list messages $receiver_sid $sender_sid
+   assertStdoutGrep --stdout --matches=1 ":<:How are you\$"
+   assertStdoutEgrep --stdout --matches=1 ":5:[0-9]+:[0-9]+:MARK:read\$"
+   assertStdoutGrep --stdout --matches=1 ":<:Hi\$"
+   assertStdoutLineCount '==' 5
+   
+   # 6. mark all messages as read
+   set_instance "+$receiver"
+   executeOk_servald meshms read messages $receiver_sid
+   executeOk_servald meshms list messages $receiver_sid $sender_sid
+   assertStdoutEgrep --stdout --matches=1 "^0:25:[0-9]+:[0-9]+:MARK:read\$"
+   assertStdoutEgrep --stdout --matches=1 "^1:[0-9]+:25:[0-9]+:<:How are you\$"
+   assertStdoutEgrep --stdout --matches=1 "^2:[0-9]+:5:[0-9]+:<:Hi\$"
+   assertStdoutLineCount '==' 5
+   
+   # 7. list messages from the senders point of view after they have been delivered
+   sender_receives_read_receipt() {
+       set_instance "+$sender"
+       executeOk_servald meshms list messages $sender_sid $receiver_sid
+
+       tfw_cat --stdout
+       if ! egrep "^0:25:[0-9]+:[0-9]+:ACK:delivered\$" $_tfw_tmp/stdout; then
+	   return 1;
+       fi
+       if ! egrep "^1:25:0:[0-9]+:>:How are you\$" $_tfw_tmp/stdout; then
+	   return 1
+       fi
+       if ! egrep "^2:5:0:[0-9]+:>:Hi\$" $_tfw_tmp/stdout; then
+	   return 1;
+       fi
+       assertStdoutLineCount '==' 5
+   }
+   wait_until  --timeout=$maxwait sender_receives_read_receipt
+}
+
+doc_Lab_Message="Have a MeshMS conversation from 9(C) to A3(H) and back"
+setup_Lab_Message(){
+   setup_lab_topology
+}
+test_Lab_Message(){
+   two_way_conversation 30 'C' 'H'
+}
+
+#doc_TEMP="TEMP"
+#setup_TEMP(){
+#   
+#}
+#test_TEMP(){
+
+#}
+
+#doc_TEMP="TEMP"
+#setup_TEMP(){
+#
+#}
+#test_TEMP(){
+#
+#}
+
 runTests "$@"
+
