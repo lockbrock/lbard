@@ -29,13 +29,10 @@ setup_bundles() {
    setup_servald
    assert_no_servald_processes
    foreach_instance +A +B +C +D create_single_identity
-   echo "1: $1"
-   echo "2: $2"
-   echo "3: $3"
-   eval v="$4"
-   echo "4: ${v}"
+
    # Create files in each servald instance if requested
-   if [ "x$2" != "x" ]; then
+   if [ "x$2" != "x0" ]; then
+      tfw_log "Adding $2 common files"
       # 2: number of common files
        common_files=$2
        n=0
@@ -57,6 +54,7 @@ setup_bundles() {
    fi
    if [ "x$3" != "x" ]; then
    # 3: number of files per instance
+      tfw_log "Adding $2 files to each instance"
       files_per_instance=$3       
       for i in A B C D
       do
@@ -80,20 +78,40 @@ setup_bundles() {
    fi
 }
 
-
 setup() {
    setup_bundles $*
    start_instances $*
 }
 
 
-doc_DualType="Test, can we get wifi/radio working together?"
+
+doc_nSetup="Testing if we can create {n} serval instances"
+setup_nSetup(){
+   setupN "+A +B +C +D +E +F"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 3,4; allow between 4,5; deny all;"
+   #setupN "+A +B +C +D +E +F"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "0" "allow between 0,1;allow between 3,4;allow between 4,5;"
+   
+   foreach_instance +B +C add_servald_interface 1
+   foreach_instance +C +D add_servald_interface 2
+
+   set_instance +A
+   rhizome_add_file file1 50
+}
+test_nSetup(){
+      fReceivedBundles() {
+      bundle_received_by $BID:$VERSION +F
+   }
+   wait_until --timeout=120 fReceivedBundles
+}
+
+
+doc_DualType="A 4 node wifi/rfd900 chain. One wifi, two radio links"
 setup_DualType(){
+   # A -r-> B -w-> C -r-> D
    # No radio connection between 1(B) and 2(C)
    lbardparams="allow between 0,1; allow between 2,3; deny all;"
 
    setup 0 0 0 "\${lbardparams}"
-   # Connect 1(B) and 2(C) via a wifi interface of number 1
+   # Connect 1(B) and 2(C) via a wifi/rhizome interface of number 1
    foreach_instance +B +C add_servald_interface 1
 
    # Insert a file to server A
@@ -107,7 +125,7 @@ test_DualType(){
    wait_until --timeout=60 dReceivedBundles
 }
 
-doc_multihop_wifi="Send a bundle between chain of wifi nodes"
+doc_multihop_wifi="Send a bundle between a chain of 4 wifi nodes"
 setup_multihop_wifi() {
    lbardparams="deny all;"
 
@@ -128,7 +146,7 @@ test_multihop_wifi() {
 }
 
 
-doc_OneOne="FAKE RADIO - RFD900 - A single very small bundle transfers to a single peer"
+doc_OneOne="FAKE RADIO (RFD900) - A single very small bundle transfers to a single peer"
 setup_OneOne() {
    lbardparams="allow between 0,1; deny all;"
    setup 0 0 0 "\${lbardparams}" 
@@ -144,7 +162,7 @@ test_OneOne() {
    wait_until all_bundles_received
 }
 
-doc_One="FAKE RADIO - RFD900 - A single very small bundle transfers to 3 peers"
+doc_One="FAKE RADIO (RFD900) A single very small bundle transfers to 3 peers"
 setup_One() {
    lbardparams="allow between 0,3; allow between 3,2; allow between 2,1; deny all;"
    setup 0 0 0 "\${lbardparams}"

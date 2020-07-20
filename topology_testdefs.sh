@@ -26,7 +26,6 @@ add_servald_interface() {
    fi
 
    while [ $# -ne 0 ]; do
-      echo "Interface is: $1"
       case "$1" in
       "wifi")
          TYPE="wifi"
@@ -51,25 +50,36 @@ add_servald_interface() {
          ;;
       esac
    done
-   echo "after it: $TYPE"
-   #INTERFACE="1"
-   echo "INTERFACE val: $INTERFACE"
 
    if [ "x$INTERFACE" = "x" ]; then
       # Set it to an /probably/ unused number. This prevents weird issues with interfaces accidentally matching when one is defined explicitly
       INTERFACE="999$instance_number"
    fi
 
-   #    wifi     radio
-   #    0        0
-   #    0        1
-   #    1        0
-   #    1        1
-   testVar=""
+   testVar="
+      set log.console.level debug \
+      set log.console.show_pid on \
+      set log.console.show_time on \
+      set debug.rhizome on \
+      set debug.http_server on \
+      set debug.server on \
+      set debug.mdprequests on \
+      set debug.httpd on \
+      set debug.rhizome_manifest on \
+      set debug.rhizome_ads off \
+      set debug.rhizome_tx on \
+      set debug.rhizome_rx on \
+      set debug.rhizome_sync_keys on \
+      set debug.msp on \
+      set debug.config on \
+      set debug.mdprequests on \
+      set debug.mdp_filter on \
+      set debug.verbose true \
+      "
    # Setting the config /should/ append it, not reset it. Lets find out!
    if [ "$FAKE_RADIO" == "1" ]; then
       tfw_log "FAKE RADIO TRUE"
-      testVar="
+      testVar+="
          set rhizome.http.enable 1 \
          set api.restful.users.lbard.password lbard"
    fi
@@ -92,6 +102,94 @@ configure_servald_server() {
    add_servald_interface "$1" "$2"
 }
 
+
+setupN(){
+   setup_servald
+
+   #  $1 :     Interface letters
+   #  $2 :     Radio types
+   #  $3 :     Packet loss
+   #  $4 :     LBARD Params
+   tfw_log "Vars: interfaces: $1 \\nradiotypes: $2\\npacket loss: $3\\nlbard params: $4"
+   foreach_instance $1 create_single_identity
+   
+   # TODO: Add packet loss
+   lbardparams="$3"
+   
+   # Get array of radio types
+   tfw_log "\$2 is: $2"
+   radio_str="$(echo -e $2 | tr '\n' ' ' | tr -s ',' '\n')"
+   tfw_log "Radios:: $radio_str"
+   radio_array=($(echo $radio_str | tr "\n" "\n"))
+
+   # Set radio types
+   start_fakeradio=0
+   num_radio_nodes=0
+
+   interfaceArray=()
+   for node in "${radio_array[@]}"; do
+      echo "node: $node"
+      if [[ "$node" != "/" ]]; then
+         # A radio type
+         echo "Start fake radio now!"
+         start_fakeradio=1
+         num_radio_nodes=$((num_radio_nodes+=1))
+         # TODO: add to array for sending to 'start_servald'
+
+         interfaceArray=("${interfaceArray[@]}" "fakeradio")
+         echo "test1111: ${interfaceArray[@]}"
+      fi
+   done
+
+   foreach_instance $1 start_servald_server \${interfaceArray[@]}
+   
+   # IF more than one radio, less crud in log if started without 
+   # Start fakeradio with LBARD params & packet loss
+   if [[ $start_fakeradio != 0 ]]; then
+      nodeIndex=1
+      for node in "${radio_array[@]}"; do
+            tmp=$((64+nodeIndex))
+            instance_name=$(printf "\\$(printf '%01o' "$tmp" )")
+            tfw_log "node: $nodeIndex has name: $instance_name"
+            set_instance "+$instance_name"
+
+            # Start httpd daemon
+            get_servald_restful_http_server_port "PORT$instance_name" "+$instance_name"
+            nodeIndex=$((nodeIndex+=1))
+      done
+      fork %fakeradio fakecsmaradio "$2" ttys.txt "$lbardparams"
+
+      tfw_log "Waiting until we reach $num_radio_nodes nodes"
+      wait_until --timeout=15 eval [ '$(cat ttys.txt | wc -l)' -ge "$num_radio_nodes" ]
+
+      # Needs to be done /after/ fakeradio started
+      nodeIndex=1
+      for node in "${radio_array[@]}"; do
+            tmp=$((64+nodeIndex))
+            instance_name=$(printf "\\$(printf '%01o' "$tmp" )")
+            tfw_log "node: $nodeIndex has name: $instance_name"
+            set_instance "+$instance_name"
+
+            # Starting LBARD for each fakeradio
+            tty=$(sed -n ${nodeIndex}p ttys.txt)
+
+            # This grossness is so we can have dynamic variable naming. Exciting (also, the only way to nicely make this work)
+            eval tmp="\$\PORT\$instance_name"; 
+            eval t_port=${tmp}   
+            
+            eval tmp="\$\SID\$instance_name"; 
+            eval t_sid=${tmp} 
+            
+            eval tmp="\$\ID\$instance_name"; 
+            eval t_id=${tmp} 
+
+            fork_lbard_console "$addr_localhost:$t_port" lbard:lbard "$t_sid" "$t_id" "$tty" announce pull ${lbardflags}
+            nodeIndex=$((nodeIndex+=1))
+      done;
+   fi
+}
+
+
 start_instances() {
    # First: radio types, string; ie "rfd900,rfd900,rfd900,rfd900"
    # TODO: Add option to not specify radio type
@@ -109,52 +207,23 @@ start_instances() {
    eval tmp="$4"
    fakeradio_nodes="$(echo -e $tmp | tr '\n' ' ' | sed -e 's/[^0-9]/ /g' -e 's/^ *//g' -e 's/ *$//g' | tr -s ' ' | sed 's/ /\n/g')"
 
-   eval tmp="$5"
-   wifi_nodes="$(echo -e $tmp | tr '\n' ' ' | sed -e 's/[^0-9]/ /g' -e 's/^ *//g' -e 's/ *$//g' | tr -s ' ' | sed 's/ /\n/g')"
-
-   if [ "x$fakeradio_nodes" != x ] && [ "x$wifi_nodes" != x ]; then
-      all_nodes=$(echo -e "${fakeradio_nodes}\\n${wifi_nodes}" | sort -u -)
+   if [ "x$fakeradio_nodes" != x ]; then
+      all_nodes=$(echo -e "${fakeradio_nodes}" | sort -u -)
    else
-      # One doesn't exist so it doesn't hurt anything to just mash them together. One of them will just be empty
-      # /MAY/ have an unnecessary '0' due to the other but we'll see...
-      if [ "x$fakeradio_nodes" != x ]; then
-         echo "test"
-         all_nodes=$(echo -e "${fakeradio_nodes}" | sort -u -)
-      elif [ "x$wifi_nodes" != x ]; then
-         all_nodes=$(echo -e "${wifi_nodes}" | sort -u -)
-      else
-         tfw_log "WARNING: No interfaces defined. This may be fine if you're defining them later."
-      fi
+      # Fakeradio nodes not defined
+      tfw_log "WARNING: No fakeradio interfaces defined. This may be fine if you're defining them later."
    fi
 
    # Convert strings to arrays
    nodes_array=($(echo $all_nodes | tr "\n" "\n"))
-   echo "nodes_array: ${nodes_array[@]}"
-
-   wifi_node_array=($(echo $wifi_nodes | tr "\n" "\n"))
-   echo "wifi_node_array: ${wifi_node_array[@]}"
 
    fakeradio_node_array=($(echo $fakeradio_nodes | tr "\n" "\n"))
-   echo "fakeradio_node_array: ${fakeradio_node_array[@]}"
 
-   echo "node array: ${nodes_array[@]}"
    interfaceArray=()
    for node in "${nodes_array[@]}"; do
-      interfaces=""
       # If node is in fakeradio_node_array
-      if [[ " ${fakeradio_node_array[@]} " =~ " ${node}" ]]; then
-         echo "$node is in fakeradio: ${fakeradio_node_array[@]}"
-         interfaces="fakeradio "
-      fi
-      if [[ " ${wifi_node_array[@]} " =~ " ${node}" ]]; then
-         echo "$node is in wifi: ${wifi_node_array[@]}"
-         interfaces+="wifi "
-      fi
+      interfaces="fakeradio "
       interfaceArray=("${interfaceArray[@]}" "$interfaces")
-   done
-
-   for interface in "${interfaceArray[@]}"; do
-      echo "Interface: $interface"
    done
 
    foreach_instance +A +B +C +D start_servald_server \${interfaceArray[@]}
@@ -163,11 +232,8 @@ start_instances() {
    get_servald_restful_http_server_port PORTB +B
    get_servald_restful_http_server_port PORTC +C
    get_servald_restful_http_server_port PORTD +D
-   # Start the fake radio daemon.
-   echo "fakeradio: $fakeradios"
-   echo "params: $lbardparams"
 
-   fork %fakeradio fakecsmaradio "$fakeradios" ttys.txt "$lbardparams"
+   fork %fakeradio fakecsmaradio "$fakeradios" ttys.txt "$lbardparams"   
    wait_until --timeout=15 eval [ '$(cat ttys.txt | wc -l)' -ge 4 ]
    tty1=$(sed -n 1p ttys.txt)
    tty2=$(sed -n 2p ttys.txt)
@@ -204,15 +270,13 @@ start_servald_server() {
    #echo "instance fromarg: $1"
    #set_instance_fromarg "$1" && shift
 
-   echo "interfaceArray 111: ${interfaceArray[@]}"
-   echo "instance num: $instance_number : interface array is: ${interfaceArray[$instance_number - 1]}"
    configure_servald_server ${interfaceArray[$instance_number - 1]}
    # Start servald server
    local -a before_pids
    local -a after_pids
    get_servald_pids before_pids
    tfw_log "# before_pids=$before_pids"
-   executeOk --core-backtrace servald_start #"$@"
+   executeOk --core-backtrace servald_start 
    extract_stdout_keyvalue start_instance_path instancepath '.*'
    extract_stdout_keyvalue start_pid pid '[0-9]\+'
    assert [ "$start_instance_path" = "$SERVALINSTANCE_PATH" ]
