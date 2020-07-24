@@ -28,6 +28,18 @@ GOAL:
 4 # Receive a packet (LBARD)
     lbard[x] stderr
 
+    ## >>> [18:45.20.858 3F76*] Peer 2360d9a33bea* HAS some bundle that we don't have (key prefix=D4A6*).
+    *** TXing every 437+1d109ms, ratio=0.038 (1+0)
+    >>> [18:45.21.915 3F76*] Progress receiving BID=92aefeabda1687ad* version 1595582106764: manifest is -1 bytes long (RX bitmap 0000), and body -1 bytes long. Bitmap p=    0 : YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY
+    >>> [18:45.21.915 3F76*] Scheduling bitmap report.
+    >>> [18:45.23.135 3F76*] Progress receiving BID=92aefeabda1687ad* version 1595582106764: manifest is 258 bytes long (RX bitmap fcff), and body 50 bytes long. Bitmap p=    0 : Y
+    >>> [18:45.23.135 3F76*] Scheduling bitmap report.
+    >>> [18:45.24.385 3F76*] Progress receiving BID=92aefeabda1687ad* version 1595582106764: manifest is 258 bytes long (RX bitmap feff), and body 50 bytes long. Bitmap p=    0 : Y
+    >>> [18:45.24.385 3F76*] Scheduling bitmap report.
+    *** TXing every 437+1d109ms, ratio=0.462 (3+9)
+    >>> [18:45.25.432 3F76*] Progress receiving BID=92aefeabda1687ad* version 1595582106764: manifest is 258 bytes long (RX bitmap ffff), and body 50 bytes long. Bitmap p=    0 : Y
+    >>> [18:45.25.432 3F76*] We have the entire bundle 92aefeabda1687ad*/1595582106764 now.
+
     T+16086ms : Flushing 47 byte report from queue, 0 remaining.
     Sent report_queue message 'progress report' to 41968644eaf7*
     report_queue message:
@@ -38,7 +50,7 @@ GOAL:
     4cd7906bd1fd9877* version 1595388308835     : [M     #####/B            130/258, 0/50  [130 since last report]]
 
 
-5 # LBARD gets new bundle (ie. Rhizome sees it (added manually or wifi))
+5 ### LBARD gets new bundle (ie. Rhizome sees it (added manually or wifi))
     lbard[x] stderr
 
     >>> [12:55.28.205 5657*] We have new bundle 4CD7906BD1FD9877C19B647EF6084ECA3773855BB92841FE92B9EAFD5D487F15/1595388308835
@@ -164,3 +176,12 @@ Keeping packet due to rule #1
     Filter and enqueue 223 bytes from 0 -> 3
     Dropped packet due to rule #2
 
+
+# Convert T+ to real timestamp.. no idea whose idea it was to store in T+.. great idea though..
+>>> [18:45.36.857 9280*] Flushing 22 byte report from queue, 0 remaining.
+T+30468ms : Flushing 22 byte report from queue, 0 remaining.
+
+18:45:06.376 # executeOk --core-backtrace --timeout=600 --executable=lbard --stdout-file=E_LBARDOUT --stderr-file=E_LBARDERR 127.0.0.1:4114 lbard:lbard 9280164C7615E9E61E954219E39B531BB5CF032EA1BCE6CFF0A21ED517FE1A5A FEC1C61CCE2A2E70FE4135C6463980D907915FDA12F352C2C1A567FB1B35A76A /dev/pts/6 announce pull bundles
+    67506376
++      30468ms
+=   67536844

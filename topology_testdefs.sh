@@ -109,6 +109,8 @@ setupN(){
    
    # TODO: Add packet loss
    lbardparams="$3"
+   # Show proper debug info
+   lbardflags="bundles"
    
    # Get array of radio types
    tfw_log "\$2 is: $2"
@@ -234,6 +236,7 @@ start_instances() {
    tty3=$(sed -n 3p ttys.txt)
    tty4=$(sed -n 4p ttys.txt)
 
+   lbardflags="bundles"
    # Start four lbard daemons.
    set_instance +A
    fork_lbard_console "$addr_localhost:$PORTA" lbard:lbard "$SIDA" "$IDA" "$tty1" announce pull ${lbardflags}
