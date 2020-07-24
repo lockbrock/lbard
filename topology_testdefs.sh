@@ -59,20 +59,16 @@ add_servald_interface() {
    testVar="
       set log.console.show_pid on \
       set log.console.show_time on \
-      set debug.rhizome on \
-      set debug.http_server on \
       set debug.server on \
       set debug.mdprequests on \
       set debug.httpd on \
       set debug.rhizome_manifest on \
-      set debug.rhizome_ads off \
-      set debug.rhizome_tx on \
-      set debug.rhizome_rx on \
       set debug.rhizome_sync_keys on \
       set debug.msp on \
       set debug.config on \
       set debug.mdprequests on \
       set debug.mdp_filter on \
+      set debug.verbose on \
       "
    # Setting the config /should/ append it, not reset it. Lets find out!
    if [ "$FAKE_RADIO" == "1" ]; then

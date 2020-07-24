@@ -1,5 +1,5 @@
 BINDIR=.
-EXECS = $(BINDIR)/lbard $(BINDIR)/manifesttest $(BINDIR)/fakecsmaradio $(BINDIR)/fakeouternet
+EXECS = $(BINDIR)/lbard $(BINDIR)/manifesttest $(BINDIR)/fakecsmaradio $(BINDIR)/fakeouternet $(BINDIR)/topologyDiagrams
 
 all:	$(EXECS)
 

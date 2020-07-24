@@ -225,7 +225,7 @@ setup_lab_topology(){
    #  G(6)  :  A2
    #  H(7) :  A3
 
-   setupN "+A +B +C +D +E +F +G +H"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 0,3; allow between 1,3; allow between 3,4; allow between 4,6; allow between 6,5;" 
+   setupN "+A +B +C +D +E +F +G +H"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 0,3; allow between 1,3; allow between 3,4; allow between 4,6; allow between 6,5; deny all" 
    foreach_instance +B +C add_servald_interface 1
    foreach_instance +F +H add_servald_interface 2
 }

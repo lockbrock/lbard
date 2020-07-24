@@ -1,0 +1,166 @@
+GOAL: 
+2 # Send a packet (RADIO)
+    Must have fragment type 'q'
+
+    >>> [20:52.47.255 55E5*] Packet #9 : length=213 bytes
+    T+15241ms : from sid:55E52CBB48C9* to sid:3A54[0000]*
+            Fragment type 'q' : Bundle piece (offset < 1MB)
+            bid=6684C38103BB25E6*, version=b
+            manifest bytes [0..127]
+    >>> [20:52.47.255 55E5*] 6684C381*/11 manifest 0..127 (packet #9 offset 30)
+                Bytes of piece:
+                0000:  B0 02 82 55 E5 2C BB 48 C9 0C F6 0F 21 AF F3 7A
+                0010:  7A F7 59 59 6C 47 10 83 9F 59 90 86 E8 DD A2 34
+                0020:  AA E5 5B 83 91 CB DA E2 A5 4D B9 43 84 9B 35 71
+                0030:  5D A8 FF 82 07 CC 36 2A 4F CA AF E6 5B 0C 78 DB
+                0040:  DE 82 F6 26 A1 0B A4 00 A0 0B 80 66 84 C3 81 03
+                0050:  BB 25 E6 B3 B6 2C 7D 70 A0 FF 1A EF 09 0D 10 84
+                0060:  D3 1A 67 1A 30 8F 2E 9A 1A 44 AA 81 F0 DF A2 33
+                0070:  FA D0 F4 79 AB 22 17 F9 E9 05 E2 06 18 11 07 6E
+3 # Send a Packet (LBARD)
+    lbard[x] stderr
+
+    T+19032ms : Sending length of bundle 4CD7906BD1FD9877C19B647EF6084ECA3773855BB92841FE92B9EAFD5D487F15 (bundle #0, version 1595388308835, cached_version 1595388308835)
+    T+19032ms : Resending bundle 4CD7906BD1FD9877C19B647EF6084ECA3773855BB92841FE92B9EAFD5D487F15 from the start.
+    T+19032ms : Sending length of bundle 4CD7906BD1FD9877C19B647EF6084ECA3773855BB92841FE92B9EAFD5D487F15 (bundle #0, version 1595388308835, cached_version 1595388308835)
+
+
+4 # Receive a packet (LBARD)
+    lbard[x] stderr
+
+    T+16086ms : Flushing 47 byte report from queue, 0 remaining.
+    Sent report_queue message 'progress report' to 41968644eaf7*
+    report_queue message:
+    0000:  70 72 6F 67 72 65 73 73 20 72 65 70 6F 72 74 00  progress report.
+    0010:  70 BE 8E 8A 7E 55 00 00 21 00 00 00 00 00 00 00  p....U..!.......
+    0020:  34 63 64 37 39 30 36 62 64 31 66 64 39 38 37  4cd7906bd1fd987 
+    >> List of bundles currently being received (0 in rhizome store)
+    4cd7906bd1fd9877* version 1595388308835     : [M     #####/B            130/258, 0/50  [130 since last report]]
+
+
+5 # LBARD gets new bundle (ie. Rhizome sees it (added manually or wifi))
+    lbard[x] stderr
+
+    >>> [12:55.28.205 5657*] We have new bundle 4CD7906BD1FD9877C19B647EF6084ECA3773855BB92841FE92B9EAFD5D487F15/1595388308835
+
+
+6 # Send a packet (WIFI)
+# Send the manifest
+13:10:20.112 SERVALD:B Sending sync messsage SEND_MANIFEST 7C6DFA4953C22A63
+13:10:20.113 SERVALD:B Attempting to queue mdp packet from 6514735C70E4978F790CBC681C95E67B1EA1CE3DBFE49C8598C7A842D00E0018:18 to 7A43982622B4C3C80ED8CD5B3195A23C85F2B61882BF6204C806C7F1974C336C
+13:10:20.113 SERVALD:B Clearing SEND_MANIFEST 7C6DFA4953C22A63
+13:10:20.113 SERVALD:B FREE manifest 0x55d0908c5270
+13:10:20.113 SERVALD:B Send frame 464 bytes
+
+# Send the bundle
+13:10:20.118 SERVALD:B Attempting to queue mdp packet from 6514735C70E4978F790CBC681C95E67B1EA1CE3DBFE49C8598C7A842D00E0018:18 to 7A43982622B4C3C80ED8CD5B3195A23C85F2B61882BF6204C806C7F1974C336C
+...
+13:10:20.118 SERVALD:B Sending 7C6DFA4953C22A63 50 bytes (now 50 of 50)
+13:10:20.192 SERVALD:B Neighbour 7A43982622B4C3C80ED8CD5B3195A23C85F2B61882BF6204C806C7F1974C336C has now received 7C6DFA4953C22A63
+
+
+#7 ### Receive a packet (WIFI)
+# Has now received manifest
+13:10:20.113 SERVALD:C NEW manifest 0x5608a6136010
+13:10:20.113 SERVALD:C Processing sync message SEND_MANIFEST 7C6DFA4953C22A63 -1
+
+# Receiving the bundle
+13:10:20.170 SERVALD:C - Receiving payload [0 of 50]
+13:10:20.170 SERVALD:C Peer 6514735C70E4978F790CBC681C95E67B1EA1CE3DBFE49C8598C7A842D00E0018 has 7C6DFA4953C22A63 RECV_PAYLOAD
+13:10:20.186 SERVALD:C Processing sync message SEND_PAYLOAD 7C6DFA4953C22A63 -1
+13:10:20.186 SERVALD:C Wrote to 7C6DFA4953C22A63 50, now 50 of 50
+
+INFO: [288103] 13:10:20.187 rhizome_database.c:1501:rhizome_add_manifest_to_store()  RHIZOME ADD MANIFEST service=file bid=3889B11DAFB5C6814EFB77EA2D4BE65F059D5006F08933D3C37CA1AD764D5FAA version=1595389191543
+
+
+#8 ### fakeradio: rules
+    radio_count=4
+    RULE: 'allow between 6,5'
+
+#9 ### Get SID of each node
+13:09:48.407 SIDB=6514735C70E4978F790CBC681C95E67B1EA1CE3DBFE49C8598C7A842D00E0018
+
+10 Fakeradio communication??
+
+# Radio, 3 to -1 (broadcast)
+Filter and enqueue 52 bytes from 3 -> -1
+>>> [13:10.05.950 7408*] Packet #4 : length=52 bytes
+
+# After broadcast, fakeradio then filters based on rules
+>>> [13:10.05.950 RADIO] @ T+14683ms: 85 bytes, 4 packets, 48 sync bytes, 0 manifest bytes, 0 body bytes, 0 colissions, 29.5% channel utilisation.
+Filter and enqueue 52 bytes from 3 -> 0
+Dropped packet due to rule #2
+Filter and enqueue 52 bytes from 3 -> 1
+Dropped packet due to rule #2
+Filter and enqueue 52 bytes from 3 -> 2
+Keeping packet due to rule #1
+
+10 fakeradio manifest
+    Filter and enqueue 203 bytes from 0 -> -1
+    >>> [13:10.07.123 6E82*] Packet #10 : length=203 bytes
+    T+15856ms : from sid:6E825E21D91E* to sid:6514[0000]*
+            Fragment type 'q' : Bundle piece (offset < 1MB)
+            bid=3889B11DAFB5C681*, version=173749b2577
+            manifest bytes [0..127]
+    >>> [13:10.07.123 6E82*] 3889B11D*/1595389191543 manifest 0..127 (packet #10 offset 20)
+                Bytes of piece:
+                0000:  B0 00 A0 F7 CA EC A4 B7 2E 80 38 89 B1 1D AF B5
+                0010:  C6 81 4E FB 77 EA 2D 4B E6 5F 05 9D 50 06 F0 89
+                0020:  33 D3 C3 7C A1 AD 76 4D 5F AA 81 87 DF 6C D1 C6
+                0030:  D0 27 88 C2 CA E1 66 08 A8 5F 4F 36 E8 DA 46 FA
+                0040:  38 7F D5 F8 B6 FD AF 33 76 9D 18 A2 F7 CA EC A4
+                0050:  B7 2E 6E 61 6D 65 3D 66 69 6C 65 31 0A A1 32 90
+                0060:  13 21 C7 84 8D 4B 88 61 A0 86 5E B3 60 D8 E1 C9
+                0070:  8E AC D1 11 8A 3C 06 04 2E FE D2 01 71 0A A2 E7
+    There are 3 filter rules.
+    >>> [13:10.07.124 RADIO] @ T+15857ms: 361 bytes, 10 packets, 120 sync bytes, 128 manifest bytes, 0 body bytes, 0 colissions, 3.4% channel utilisation.
+    Filter and enqueue 203 bytes from 0 -> 1
+    Keeping packet due to rule #0
+    T+15857ms : from sid:6E825E21D91E* to sid:6514[0000]*
+            Fragment type 'q' : Bundle piece (offset < 1MB)
+            bid=3889B11DAFB5C681*, version=173749b2577
+            manifest bytes [0..127]
+                Bytes of piece:
+                0000:  B0 00 A0 F7 CA EC A4 B7 2E 80 38 89 B1 1D AF B5
+                0010:  C6 81 4E FB 77 EA 2D 4B E6 5F 05 9D 50 06 F0 89
+                0020:  33 D3 C3 7C A1 AD 76 4D 5F AA 81 87 DF 6C D1 C6
+                0030:  D0 27 88 C2 CA E1 66 08 A8 5F 4F 36 E8 DA 46 FA
+                0040:  38 7F D5 F8 B6 FD AF 33 76 9D 18 A2 F7 CA EC A4
+                0050:  B7 2E 6E 61 6D 65 3D 66 69 6C 65 31 0A A1 32 90
+                0060:  13 21 C7 84 8D 4B 88 61 A0 86 5E B3 60 D8 E1 C9
+                0070:  8E AC D1 11 8A 3C 06 04 2E FE D2 01 71 0A A2 E7
+    There are 3 filter rules.
+    Filter and enqueue 203 bytes from 0 -> 2
+    Dropped packet due to rule #2
+    Filter and enqueue 203 bytes from 0 -> 3
+    Dropped packet due to rule #2
+    Filter and enqueue 104 bytes from 1 -> -1
+
+11 Fakeradio bundle
+    >>> [13:10.08.244 RADIO] @ T+16977ms: 704 bytes, 16 packets, 182 sync bytes, 192 manifest bytes, 50 body bytes, 0 colissions, 3.2% channel utilisation.
+    Filter and enqueue 223 bytes from 0 -> 1
+    Keeping packet due to rule #0
+    T+16977ms : from sid:6E825E21D91E* to sid:0000[0000]*
+            Fragment type 'L' : unknown
+            bid=3889B11DAFB5C681*, version=173749b2577
+    There are 3 filter rules.
+    T+16978ms : from sid:6E825E21D91E* to sid:6514[0000]*
+            Fragment type 'p' : Bundle end piece (offset < 1MB)
+            bid=3889B11DAFB5C681*, version=173749b2577
+            body length = 49
+    There are 3 filter rules.
+    T+16978ms : from sid:6E825E21D91E* to sid:6514[0000]*
+            Fragment type 'q' : Bundle piece (offset < 1MB)
+            bid=3889B11DAFB5C681*, version=173749b2577
+            manifest bytes [128..191]
+            Bytes of piece:
+            0000:  FB 2D B2 EC 50 60 D0 FA 3D CE E3 77 EF DE DD 64
+            0010:  C3 C8 ED 76 C7 83 DB EE BB DC CA C8 4A F2 A8 90
+            0020:  00 17 65 93 D3 9E FF 89 07 CC A9 3C E1 CB 35 27
+            0030:  73 67 3E 2A 34 F9 C6 10 63 DB BE 5A A3 49 8E E9
+    There are 3 filter rules.
+    Filter and enqueue 223 bytes from 0 -> 2
+    Dropped packet due to rule #2
+    Filter and enqueue 223 bytes from 0 -> 3
+    Dropped packet due to rule #2
+
