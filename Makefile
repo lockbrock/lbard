@@ -75,6 +75,8 @@ SRCS=	$(SRCDIR)/main.c \
 	\
 	$(SRCDIR)/xfer/message_handlers.c \
 	$(MESSAGEHANDLERS) \
+	\
+
 
 
 HDRS=	$(INCLUDEDIR)/lbard.h \
@@ -96,7 +98,7 @@ HDRS=	$(INCLUDEDIR)/lbard.h \
 #LDFLAGS= -lefence
 LDFLAGS=
 # -I$(SRCDIR) is required for fec-3.0.1
-CFLAGS= -g -std=gnu99 -Wall -fno-omit-frame-pointer -D_GNU_SOURCE=1 -I$(INCLUDEDIR) -I$(SRCDIR)/fec -I$(SRCDIR)
+CFLAGS= -g -std=gnu99 -w -fno-omit-frame-pointer -D_GNU_SOURCE=1 -I$(INCLUDEDIR) -I$(SRCDIR)/fec -I$(SRCDIR)
 
 $(INCLUDEDIR)/version.h:	$(SRCS) $(HDRS)
 	echo "#define VERSION_STRING \""`./md5 $(SRCS)`"\"" >$(INCLUDEDIR)/version.h
@@ -171,6 +173,14 @@ $(SRCDIR)/xfer/message_handlers.c:	$(MESSAGEHANDLERS) Makefile gen_msghandler_li
 	echo "message_handler message_handlers[257]={" >> $(SRCDIR)/xfer/message_handlers.c
 	./gen_msghandler_list >> $(SRCDIR)/xfer/message_handlers.c
 	echo 'NULL};' >> $(SRCDIR)/xfer/message_handlers.c
+
+TOPOLOGYSRCS = 	$(SRCDIR)/topologyDiagrams/topologyDiagrams.c
+
+topologyDiagrams: \
+	Makefile $(TOPOLOGYSRCS) $(INCLUDEDIR)/topologyDiagrams.h
+	$(CC) $(CFLAGS) -o topologyDiagrams $(TOPOLOGYSRCS)
+
+
 
 /bin/csh:
 	echo "This program requires csh for the auto-generation of some source files."
