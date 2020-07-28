@@ -87,11 +87,11 @@ setup() {
 
 doc_nSetup="Testing if we can create {n} serval instances"
 setup_nSetup(){
-   setupN "+A +B +C +D +E +F"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 3,4; allow between 4,5; deny all;"
-   #setupN "+A +B +C +D +E +F"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "0" "allow between 0,1;allow between 3,4;allow between 4,5;"
+   # Layout: A-(r)-B-(w)-C-(r)-D-(w)-E-(r)-F
+   setupN "+A +B +C +D +E +F"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 2,3; allow between 4,5; deny all;"
    
    foreach_instance +B +C add_servald_interface 1
-   foreach_instance +C +D add_servald_interface 2
+   foreach_instance +D +E add_servald_interface 2
 
    set_instance +A
    rhizome_add_file file1 50
@@ -212,6 +212,20 @@ test_Wifi_RFD900_Chain(){
       bundle_received_by $BID:$VERSION +J
    }
    wait_until --timeout=180 j_received_bundle
+}
+
+doc_LBARD_Big_File_Chain="Send a large ~5kb file across a chain of 4 UHF Nodes"
+setup_LBARD_Big_File_Chain(){
+   setupN "+A +B +C +D" "rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 1,2; allow between 2,3; deny all;"
+
+   set_instance +A
+   rhizome_add_file file1 5000
+}
+test_LBARD_Big_File_Chain(){
+   d_received_bundle(){
+      bundle_received_by $BID:$VERSION +D
+   }
+   wait_until --timeout=180 d_received_bundle
 }
 
 setup_lab_topology(){
@@ -363,7 +377,7 @@ setup_Lab_Message(){
    setup_lab_topology
 }
 test_Lab_Message(){
-   two_way_conversation 30 'C' 'H'
+   two_way_conversation 60 'C' 'H'
 }
 
 #doc_TEMP="TEMP"

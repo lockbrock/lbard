@@ -54,6 +54,8 @@ add_servald_interface() {
    if [ "x$INTERFACE" = "x" ]; then
       # Set it to an /probably/ unused number. This prevents weird issues with interfaces accidentally matching when one is defined explicitly
       INTERFACE="999$instance_number"
+   else
+      tfw_log "Servald instance $instance_name is being connected to Wifi interface {$INTERFACE}"
    fi
 
    testVar="
@@ -72,13 +74,12 @@ add_servald_interface() {
       "
    # Setting the config /should/ append it, not reset it. Lets find out!
    if [ "$FAKE_RADIO" == "1" ]; then
-      tfw_log "FAKE RADIO TRUE"
       testVar+="
          set rhizome.http.enable 1 \
          set api.restful.users.lbard.password lbard"
    fi
    if [ "${TYPE}" == "wifi" ]; then
-      tfw_log "WIFI NOW"
+
       testVar+="
          set server.interface_path $SERVALD_VAR \
          set interfaces.$INTERFACE.socket_type $SOCKET_TYPE \

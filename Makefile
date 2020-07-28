@@ -98,7 +98,7 @@ HDRS=	$(INCLUDEDIR)/lbard.h \
 #LDFLAGS= -lefence
 LDFLAGS=
 # -I$(SRCDIR) is required for fec-3.0.1
-CFLAGS= -g -std=gnu99 -w -fno-omit-frame-pointer -D_GNU_SOURCE=1 -I$(INCLUDEDIR) -I$(SRCDIR)/fec -I$(SRCDIR)
+CFLAGS= -g -std=gnu99  -Wall -fno-omit-frame-pointer -D_GNU_SOURCE=1 -I$(INCLUDEDIR) -I$(SRCDIR)/fec -I$(SRCDIR)
 
 $(INCLUDEDIR)/version.h:	$(SRCS) $(HDRS)
 	echo "#define VERSION_STRING \""`./md5 $(SRCS)`"\"" >$(INCLUDEDIR)/version.h
@@ -178,7 +178,7 @@ TOPOLOGYSRCS = 	$(SRCDIR)/topologyDiagrams/topologyDiagrams.c
 
 topologyDiagrams: \
 	Makefile $(TOPOLOGYSRCS) $(INCLUDEDIR)/topologyDiagrams.h
-	$(CC) $(CFLAGS) -o topologyDiagrams $(TOPOLOGYSRCS)
+	$(CC) $(CFLAGS) -Wno-format -o topologyDiagrams $(TOPOLOGYSRCS)
 
 
 

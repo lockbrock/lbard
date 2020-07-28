@@ -5,6 +5,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdint.h>
+#include <unistd.h>
 
 enum lineType{
     PROCESS = 1,
@@ -17,28 +18,34 @@ enum lineType{
     RHIZOME_ADD_MANIFEST = 8,
     FAKERADIO_RULES = 9,
     NODE_INFOMATION = 10,
+    FAKERADIO_BUNDLE = 11,
+    RHIZOME_LAYOUT = 12,
 };
 
-setProcess(const char proc[]);
+void setProcess(const char proc[]);
 
-isLineRelevant(const char line[]);
+int isLineRelevant(const char line[]);
 
-print_rhizome_packets(char line[]);
+void print_rhizome_packets(char line[]);
 
-print_rhizome_add_manifest(char line[]);
+void print_rhizome_add_manifest(char line[]);
 
-print_node_info(char line[]);
+void print_node_info(char line[]);
 
-print_lbard_bundle(char line[]);
+void print_lbard_bundle(char line[]);
 
-print_lbard_send(char line[]);
+void print_lbard_send(char line[]);
 
-const char *timestamp_str(long tmpLong);
+void print_rhizome_layout(char line[]);
+
+void print_fakeradio_bundle(char line[]);
+
+char *timestamp_str(long tmpLong);
 
 static char *convert_lbard_time(long initialTime, char *timeStamp);
 
-fix_lbard_timestamp(char timeStamp[]);
+void fix_lbard_timestamp(char timeStamp[]);
 
-lbard_timestamp_to_long(char line[]);
+long lbard_timestamp_to_long(const char line[]);
 
-writeLine(char line[], FILE* logFile);
+void writeLine(char line[], FILE* logFile);
