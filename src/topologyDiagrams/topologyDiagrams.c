@@ -47,6 +47,7 @@ int main(){
         exit(1);
     }
 
+    // TODO: Get output file/folder from command line
     if (fopen("./simpleLogOutput.txt","w") == NULL){
         printf("Error creating/opening output file.");
         // Program exits if the file pointer returns NULL.
@@ -322,9 +323,11 @@ void print_rhizome_add_manifest(char line[]){
  */
 void print_node_info(char line[]){
     char instance[5] = "";
-    char sid[64] = "";
-    char msg[100] = "";
-    char tmp[100] = "";
+    // SID is always 64 chars long.. We need the \0 at the end so 65
+    char sid[65] = "";
+    char msg[100];
+    memset(msg, 0, strlen(msg));
+    char tmp[50] = "";
 
     if (strcmp(process, "NONE") == 0){
         setProcess("SETUP");
