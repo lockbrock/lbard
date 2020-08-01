@@ -253,3 +253,45 @@ T+30468ms : Flushing 22 byte report from queue, 0 remaining.
     67506376
 +      30468ms
 =   67536844
+
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+GLOBAL MINOR EVENTS
+15:23:17.696 SERVALD:B Adding 15EB502E2D2D9521 to tree
+15:23:17.696 SERVALD:B RHIZOME ADD MANIFEST service=file bid=5B5C41D3EC7FC6DD6B8FEC75EDFA5E2AE400DE5B5B119FF875220A8DD1143AC1 version=1595915577526
+
+
+15:23:17.858 SERVALD:B Clearing SEND_BAR 15EB502E2D2D9521
+15:23:17.858 SERVALD:B Neighbour 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052 does not have 15EB502E2D2D9521 that we do
+15:23:17.916 SERVALD:C Adding 15EB502E2D2D9521 to tree
+
+15:23:17.922 SERVALD:B Neighbour 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052 has now received 15EB502E2D2D9521
+
+
+TODO: Combine send/req manifest with send frame?
+
+
+####################################################################################################################
+####################################################################################################################
+MAJOR EVENTS
+
+### ALL FAKERADIO TRAFFIC
+15:23:17.673 FAKERADIO A -> B [Bundle end piece ] [167 bytes]
+
+
+### SENDING manifests W/ WIFI
+15:23:17.862 SERVALD:C Attempting to queue mdp packet from 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052:18 to 2BEF74429C78AEB1347B6182E8689F9B9644EDF74379D7C0635F5649D85A2F39
+    ## BUT ONLY FOR RECEIVER (ie. don't show twice)
+    (Don't show this) 15:23:17.868 SERVALD:B Attempting to queue mdp packet from 2BEF74429C78AEB1347B6182E8689F9B9644EDF74379D7C0635F5649D85A2F39:18 to 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052
+15:23:17.868 SERVALD:B Send frame 464 bytes
+
+### Sending/receiving bundles with rhizome
+15:23:17.876 SERVALD:B Sending 15EB502E2D2D9521 50 bytes (now 50 of 50)
+15:23:17.876 SERVALD:B Sending sync messsage SEND_PAYLOAD 15EB502E2D2D9521
+15:23:17.914 SERVALD:C Processing sync message SEND_PAYLOAD 15EB502E2D2D9521 -1
+15:23:17.915 SERVALD:C Wrote to 15EB502E2D2D9521 50, now 50 of 50
+
+####################################################################################################################
+####################################################################################################################
