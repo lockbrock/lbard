@@ -23,33 +23,62 @@
     - Sort and uniq the output - some lines are identical for whatever reason
 */
 
-// TODO: Set to 1 if command line option
-int createDot = 1;
+int createDot = 0;
 
-int main(){
+int main(int argc, char **argv){
     // TODO: Get this from command line
-    char filename[] = "./tempLog2.txt";
+    char inputFilename[150];
+    char outputFilename[150];
     int bufferLength = 500;
     char buffer[bufferLength];
 
-    if ((fptr = fopen(filename,"r")) == NULL){
-        printf("Error opening log file.");
-        // Program exits if the file pointer returns NULL.
-        exit(1);
+    if (argc < 3){
+        fprintf(stderr, "Invalid number of arguments.\n");
+        usage();
+        exit(-1);
+    }else if (argc >= 4){
+        // This /should/ be where we define create dot
+        if (strcmp(argv[3], "createDot") == 0){
+            createDot = 1;
+            // TODO: Add option to automatically render dot files
+            // TODO: Define where DOT files are output
+        }else{
+            fprintf(stderr, "Invalid option: %s\n", argv[3]);
+            usage();
+            exit(-1);
+        }
     }
 
-    // TODO: Get output file/folder from command line
-    if ((outputFile = fopen("./simpleLogOutput.txt","w")) == NULL){
-        printf("Error creating/opening output file.");
+    strcpy(inputFilename, argv[1]);
+    strcpy(outputFilename, argv[2]);
+
+    if (createDot){
+        fprintf(stdout, "Creating a simple log file and dot files\n");
+    }else{
+        fprintf(stdout, "Creating a simple log file\n");
+    }
+
+    if ((fptr = fopen(inputFilename,"r")) == NULL){
+        fprintf(stdout, "Error opening log file: %s\n", inputFilename);
         // Program exits if the file pointer returns NULL.
         exit(1);
     }else{
-        //outputFile = fopen("./simpleLogOutput.txt","w");
+        fprintf(stdout, "Input file: %s\n", inputFilename);
+    }
+
+    // TODO: Get output file/folder from command line
+    if ((outputFile = fopen(outputFilename,"w")) == NULL){
+        fprintf(stdout, "Error creating/opening output file: %s\n", outputFilename);
+        // Program exits if the file pointer returns NULL.
+        exit(1);
+    }else{
+        fprintf(stdout, "Output file: %s\n", outputFilename);
         // Erase the log file
         write(outputFile, "", 1);
     }
-    printf("Opened both files\n");
+
     setProcess("NONE");
+    // TODO: Move this to a new function
     while(fgets(buffer, bufferLength, fptr)) {
     // If line matches one of our important lines then send it to a function to pretty
     // the output and write it to the simple log file.
@@ -123,6 +152,12 @@ int main(){
     }
 
     return 0;
+}
+
+void usage(){
+    fprintf(stderr, "usage: topologyDiagrams <input file> <output file> [createDot|renderDot]\n");
+    fprintf(stderr, "If you wish to create .DOT files add 'createDot'.\n");
+    fprintf(stderr, "or, if you wish to render the .DOT files, add 'renderDot.\n");
 }
 
 /**
