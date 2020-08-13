@@ -14,6 +14,12 @@ typedef struct Events {
     char destinationNode;
     char transferDetails[300];
     char majorTime[50]; // The time that is displayed in the bottom right of the diagram
+    char eventType; 
+    /*
+    Event types: (Can be expanded later to handle more types)
+    W : Wifi
+    F : Fakeradio
+    */
     // An array of 100 strings each of length 256
     //char minorEventList[256][100];
     int numMinorEvents;

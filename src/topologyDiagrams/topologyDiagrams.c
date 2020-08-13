@@ -10,25 +10,19 @@
 
 /*
     TODO:
-    #- Get all the SID and instance letter(number) of each node
-    #- Get LBARD start time for T+ lines
-    #- Detect when Fakeradio logs
-    #- Detect when ServalDna logs
     - Set writeline to use global variable file
-    #- Move fakeradio rules in to SETUP
-    #- Sort by timestamp but ignore setup section
-    #- Fix all the warnings: remove the -w from the Makefile
-    - Call log from command line, produce simple log in same directory
-    #- Work out some way of showing when/where a bundle is /ADDED/ (ie. by a test)
     - Sort and uniq the output - some lines are identical for whatever reason
 */
 
 int createDot = 0;
+int createImages = 0;
+int createPDF = 0;
+int cleanOldFiles = 1;  // Remove all files that are used to build the output format by default
+char outputFolder[150] = "";
 
 int main(int argc, char **argv){
-    // TODO: Get this from command line
     char inputFilename[150];
-    char outputFilename[150];
+    char outputFilename[150] = "";
     int bufferLength = 500;
     char buffer[bufferLength];
 
@@ -37,26 +31,36 @@ int main(int argc, char **argv){
         usage();
         exit(-1);
     }else if (argc >= 4){
-        // This /should/ be where we define create dot
+        // createDot : just create the images
+        // createImages : just render the images AND KEEP DOT
+        // createPDF : render images, add all of them to PDF
         if (strcmp(argv[3], "createDot") == 0){
             createDot = 1;
-            // TODO: Add option to automatically render dot files
-            // TODO: Define where DOT files are output
+        }else if (strcmp(argv[3], "createImage") == 0){
+            createDot = 1;
+            createImages = 1;
+        }else if (strcmp(argv[3], "createPDF") == 0){
+            createDot = 1;
+            createPDF = 1;
         }else{
             fprintf(stderr, "Invalid option: %s\n", argv[3]);
             usage();
             exit(-1);
         }
+        if (argc >= 5){
+            if (strcmp(argv[4], "noclean") == 0){
+                cleanOldFiles = 0;
+            }else{
+                usage();
+                exit(-1);
+            }
+        }
     }
 
     strcpy(inputFilename, argv[1]);
-    strcpy(outputFilename, argv[2]);
+    strcpy(outputFolder, argv[2]);
+    sprintf(outputFilename, "%s/simpleLog.txt", outputFolder);    
 
-    if (createDot){
-        fprintf(stdout, "Creating a simple log file and dot files\n");
-    }else{
-        fprintf(stdout, "Creating a simple log file\n");
-    }
 
     if ((fptr = fopen(inputFilename,"r")) == NULL){
         fprintf(stdout, "Error opening log file: %s\n", inputFilename);
@@ -66,15 +70,20 @@ int main(int argc, char **argv){
         fprintf(stdout, "Input file: %s\n", inputFilename);
     }
 
-    // TODO: Get output file/folder from command line
     if ((outputFile = fopen(outputFilename,"w")) == NULL){
         fprintf(stdout, "Error creating/opening output file: %s\n", outputFilename);
         // Program exits if the file pointer returns NULL.
+        usage();
         exit(1);
     }else{
         fprintf(stdout, "Output file: %s\n", outputFilename);
         // Erase the log file
         write(outputFile, "", 1);
+    }
+    if (createDot){
+        fprintf(stdout, "Creating a simple log file and dot files\n");
+    }else{
+        fprintf(stdout, "Creating a simple log file\n");
     }
 
     setProcess("NONE");
@@ -145,6 +154,11 @@ int main(int argc, char **argv){
     }
     fclose(fptr);
     fclose(outputFile);
+    // Sort the file in-place
+    char sortCommand[500] = "";
+    sprintf(sortCommand, "sort %s -o %s", outputFilename, outputFilename);
+    system(sortCommand);
+
     printf("Finished reading input file\n");
 
     if (createDot){
@@ -155,53 +169,49 @@ int main(int argc, char **argv){
 }
 
 void usage(){
-    fprintf(stderr, "usage: topologyDiagrams <input file> <output file> [createDot|renderDot]\n");
-    fprintf(stderr, "If you wish to create .DOT files add 'createDot'.\n");
-    fprintf(stderr, "or, if you wish to render the .DOT files, add 'renderDot.\n");
+    char *msg = "\n\
+Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|createPDF] [noclean]\n\
+    input file:     path to the log file to be simplified \n\
+    output folder:  the folder where all outputs will be saved.\n\n\
+    createDot:      optional: specifies if dot files are to be made\n\
+    createImage:    optional: specifies if images are to be made\n\
+    createPDF:      optional: specifies if a PDF is to be made\n\n\
+    noclean:        optional: don't delete files. ie. if rendering images\n\
+                    then don't delete the DOT files";
+    fprintf(stderr, "%s\n", msg);
 }
 
 /**
  *  The method used when creating dot files.
  *  Simply writes a new file that contains the entire network topology of the test
- *  TODO: Iterate through each major event (transmission of bundle) and display that on the diagram
  *  TODO: Add each minor event to the side using a LaTeX template.
  */
 void createDotFile(){
-    if ((outputFile = fopen("./dotFileTest.dot","w")) == NULL){
-        printf("Error creating/opening output file.");
-        // Program exits if the file pointer returns NULL.
-        exit(1);
-    }else{
-        // Erase the log file
-        write(outputFile, "", 1);
-    }
-
-    printf("Now printing the events\n");
-
+    // TODO: Add check for requirements: latexmk and dot/neato
+    char buffer[1000] = "";
 
     // I'm keeping it all nicely formatted when it's produced so this bit is a little ugly
     // The digraph needs to be strict since when network packets are shown they need to replace the
     // links already shown. This /may/ be able to be removed if the processing to remove existing edges
     // if a packet link is added
-    // This unfortunately does mean that Wifi/Fakeradio links between the same nodes overlap and so only wifi is shown
+    //size=\"11.7,8.3!\"\n
+
     const char *startText =  "\
 // Auto-generated by topologyDiagrams.c \n\
-strict digraph A {\n\
-    size=\"11.7,8.3!\"\n\
+digraph A {\n\
     ratio=fill\n\
-    pad=1\n\
+    pad=0.5\n\
     mindist=0.5\n\
     subgraph Nodes {\n\
         node [pin=true]\n";
-    fputs(startText, outputFile);
+    sprintf(buffer, "%s%s", buffer, startText);
     for(int i = 0; i < numSidArray; i++){
         char msg[5] = "";
         sprintf(msg, "\t\t%c\n", i+65);
-        fputs(msg, outputFile);
+        sprintf(buffer, "%s%s", buffer, msg);
     }
-
     // TODO: Sort all of the major/minor events
-    //          minor events may need a struct defined.. to easily do this
+    //          minor events may need a struct defined to easily do this
     //      convert them all to longs to compare them
 
     // Current event index /should/ be at the end
@@ -209,59 +219,131 @@ strict digraph A {\n\
     // Sort the major event array
     qsort(listEvents, listEventsLength, sizeof(struct Events), eventSort);
 
-    for (int i = 0; i < listEventsLength; i++){
-        struct Events ev = listEvents[i];
-        printf("%d: Event: %s \n%c -> %c\n", (i+1), ev.transferDetails, ev.sendingNode, ev.destinationNode);
-        printf("timestamp: %s\n\n", ev.majorTime);
-    }
+    const char *endNodes = "\
+    }\n";
+    sprintf(buffer, "%s%s", buffer, endNodes);
 
-    // =============== Layout ===============  
-    const char *layoutText = "\
-    }\n\
+    char filename[200] = "";
+    int numFile = 1;
+    char transferBuffer[500] = "";
+
+    // =============== Create dot files ===============  
+    for (int i = 0; i < listEventsLength; i++){
+        sprintf(filename, "%sdotfile%03d.dot", outputFolder, numFile);
+
+        if ((outputFile = fopen(filename, "w")) == NULL){
+            printf("Error creating/opening output file: %s\n", filename);
+        }else{
+            // Erase the dot file (if one already exists)
+            write(outputFile, "", 1);
+
+            // =============== Layout ===============  
+            // Put the initial bit: digraph, and nodes section
+            fputs(buffer, outputFile);
+
+            char endBuffer[1000] = "";
+            const char *layoutText = "\
     subgraph Layout {\n\
         edge [dir=none, penwidth=3]\n";
-    fputs(layoutText, outputFile);
+            sprintf(endBuffer, "%s%s", endBuffer, layoutText);
+            struct Events ev = listEvents[i];
 
-    // TODO: Add the transfer bits here (needs to be before the layout for arrow directions)
-    // Perhaps, we move all the fputs() to the end. That way we don't have to process anything new
-    // except the transfers..
 
-    // FAKERADIO
-    // TODO: Find some way of colouring these depending on the type of fakeradio node?
-    // ie. red for RFD900, green for Codan, etc.
-    for (int i = 0; i < numFakeradioLinks; i++){
-        char msg[48] = "";
-        sprintf(msg, "\t\t%c -> %c [color=red]\n", allFakeradioLinks[i].node1, allFakeradioLinks[i].node2);
-        fputs(msg, outputFile);
-    }
+            // =============== Transfer ===============  
+            // Add the 'Transfer' section of the .DOT file
+            printf("%d: Event: %s \n%c -> %c\n", (i+1), ev.transferDetails, ev.sendingNode, ev.destinationNode);
+            printf("timestamp: %s\n\n", ev.majorTime);
+            if (ev.eventType == 'W'){
+                sprintf(transferBuffer, "\
+    subgraph Transfer {\n\
+        edge [penwidth=3]\n\
+        %c -> %c [label=\"%s\", color=\"blue\"]\n\
+    }\n",
+                ev.sendingNode, ev.destinationNode, ev.transferDetails);                
+            }else if (ev.eventType == 'F'){
+                sprintf(transferBuffer, "\
+    subgraph Transfer {\n\
+        edge [penwidth=3]\n\
+        %c -> %c [label=\"%s\", color=red]\n\
+    }\n",
+                ev.sendingNode, ev.destinationNode, ev.transferDetails);
+            }else{
+                sprintf(stderr, "Invalid transfer type (%c) for event: %s\n", ev.eventType, ev.transferDetails);
+                exit(1);
+            }
 
-    // WIFI
-    // Wifi goes last because it hides fakeradio links (wifi will almost always be 
-    // used over fakeradio between two nodes)
 
-    // For each interface, add the link
-    for(int interface = 0; interface < MAX_LINKS; interface++){
-        char listNodes[26] = "";
-        strcpy(listNodes, RhizomeInterfaces[interface]);
-
-        if (strlen(listNodes) > 1){
-            for (int i = 0; i < strlen(listNodes) -1; i++){
-                char charA = listNodes[i];
-                for (int j = i +1; j < strlen(listNodes); j++){
-                    char msg[48] = "";
-                    sprintf(msg, "\t\t%c -> %c [color=blue]\n", charA, listNodes[j]);
-                    fputs(msg, outputFile);
+            // =============== Fakeradio Layout ===============  
+            // FAKERADIO
+            // TODO: Add to struct the type of fakeradio link so we can colour differently
+            // ie. red for RFD900, green for Codan, etc.
+            for (int i = 0; i < numFakeradioLinks; i++){
+                // This just checks that we're not re-printing the same link. Otherwise, we'd have double links when there is a transfer AND a FR/Wifi link
+                if (!(((allFakeradioLinks[i].node1 == ev.sendingNode) && (allFakeradioLinks[i].node2 == ev.destinationNode)) || ((allFakeradioLinks[i].node2 == ev.sendingNode) && (allFakeradioLinks[i].node1 == ev.destinationNode)))){
+                        char msg[48] = "";
+                        sprintf(msg, "\t\t%c -> %c [color=red]\n", allFakeradioLinks[i].node1, allFakeradioLinks[i].node2);
+                        sprintf(endBuffer, "%s%s", endBuffer, msg);
                 }
             }
+
+            // =============== Wifi Layout ===============  
+            // For each interface, add the link
+            for(int interface = 0; interface < MAX_LINKS; interface++){
+                char listNodes[26] = "";
+                strcpy(listNodes, RhizomeInterfaces[interface]);
+
+                if (strlen(listNodes) > 1){
+                    for (int i = 0; i < strlen(listNodes) -1; i++){
+                        char charA = listNodes[i];
+                        for (int j = i +1; j < strlen(listNodes); j++){
+                            char charB = listNodes[j];
+                            // This just checks that we're not re-printing the same link. Otherwise, we'd have double links when there is a transfer AND a FR/Wifi link
+                            if (!(((charA == ev.sendingNode) && (charB == ev.destinationNode)) || ((charB == ev.sendingNode) && (charA == ev.destinationNode)))){
+                                char msg[48] = "";
+                                sprintf(msg, "\t\t%c -> %c [color=blue]\n", charA, charB);
+                                sprintf(endBuffer, "%s%s", endBuffer, msg);
+                            }
+                        }
+                    }
+                }
+            }
+            // =============== End of the file ===============  
+            const char *endLayout = "\
+    }\n";
+            sprintf(endBuffer, "%s%s", endBuffer, endLayout);
+
+            const char *endBrace = "}";
+            sprintf(endBuffer, "%s%s", endBuffer, endBrace);
+
+            // =============== Write to file ===============  
+            fputs(transferBuffer, outputFile);
+            fputs(endBuffer, outputFile);
+            fclose(outputFile);
+
+            // =============== Render image ===============  
+            if (createImages || createPDF){
+                char renderCommand[250] = "";
+                sprintf(renderCommand, "neato -Tpng %s -o %soutput%03d.png", filename, outputFolder, numFile);
+                system(renderCommand);
+                if (cleanOldFiles){
+                    // Delete the DOT files if they're not wanted
+                    printf("Removing unwanted file %s \n", filename);
+                    remove(filename);        
+                }
+            }
+
+            // =============== Add to LaTex template ===============  
+
+            // TODO: Add rendered image to LaTeX template
+            // TODO: Make it aligned along the right so that labels don't move it all
+            numFile++;
         }
     }
-    const char *endLayout = "\
-    }\n";
-    fputs(endLayout, outputFile);
-
-    const char *endBrace = "}";
-    fputs(endBrace, outputFile);
-    fclose(outputFile);
+    if (createImages || createPDF){
+        printf("\nCreated %d images\n", numFile);
+    }else{
+        printf("\nCreated %d DOT files\n", numFile);
+    }
 }
 
 /**
@@ -353,7 +435,6 @@ int isLineRelevant(const char line[]){
         }
     }
 
-
     // ServalD log 
     // 13:10:27.512 #----- var/servald/instance/D/servald.log -----
     if (strstr(line, "#-----") && strstr(line, "servald.log")){
@@ -403,6 +484,7 @@ int isLineRelevant(const char line[]){
                         struct Events currentEvent;
                         currentEvent.destinationNode = sidChar;
                         currentEvent.sendingNode = instanceChar;
+                        currentEvent.eventType = 'W';
                         sprintf(dotMsg, "[%s] [%s bytes]", frameMessage, numBytes);
                         strcpy(&currentEvent.transferDetails, dotMsg);
                         strcpy(&currentEvent.majorTime, timeStamp);
@@ -566,7 +648,6 @@ void print_node_info(char line[]){
 void print_lbard_bundle(char line[]){
     //>>> [13:10.21.821 7408*] Peer 7a43982622b4* HAS some bundle that we don't have (key prefix=48CC*).
     //>>> [18:45.25.432 3F76*] We have the entire bundle 92aefeabda1687ad*/1595582106764 now.
-
     char msg[1000] = "";
     char timeStamp[16] = "";
     char tmp[100];
@@ -665,19 +746,25 @@ void print_fakeradio_bundle(char line[]){
         //printf("line: %s\n", buffer);
         // Every message ends with "There are [x] filter rules"
         if (hasMessage && strstr(buffer, "There are")){
-
             if (strcmp(messageType, "unknown") != 0){
                 // Unknown types are broadcast and specific to fakeradio
                 // Since we're already logging after they're broadcast this is redundant
                 if (strstr(messageType, "Bundle piece")){
+                    // Decrease the BID to just the first 8 characters for the DOT file
+                    // (otherwise, we have very wide diagrams)
+                    char shortBID[10];
+                    memcpy(shortBID, &bundleID[9], 8);
+                    shortBID[9] = '\*';
+                    shortBID[10] = '\0';
+
                     if (strcmp(startBytes, "")){
                         sprintf(msg, "%sFAKERADIO %c -> %c [partial bundle]  bid=%s [%s to %s. Total: %s bytes]\n", timeStamp, sendNode, destNode, bundleID, startBytes, endBytes, byteLength);
                         // The transfer message that will be displayed in the DOT file
-                        sprintf(msgDot, "[partial bundle]  bid=%s [%s to %s. Length: %s bytes]", bundleID, startBytes, endBytes, byteLength);
+                        sprintf(msgDot, "[partial bundle]  bid=%s [%s to %s. Length: %s bytes]", shortBID, startBytes, endBytes, byteLength);
                     }else{
                         sprintf(msg, "%sFAKERADIO %c -> %c [bundle piece]  bid=%s [%s bytes]\n", timeStamp, sendNode, destNode, bundleID, byteLength);
                         // The transfer message that will be displayed in the DOT file
-                        sprintf(msgDot, "[bundle piece]  bid=%s [%s bytes]", bundleID, byteLength);
+                        sprintf(msgDot, "[bundle piece] bid=%s [%s bytes]", shortBID, byteLength);
                     }
                 }else{
                     sprintf(msg, "%sFAKERADIO %c -> %c [%s] [%s bytes]\n", timeStamp, sendNode, destNode, messageType, byteLength);
@@ -689,6 +776,7 @@ void print_fakeradio_bundle(char line[]){
                     // Make sure to convert to the alpha representation of the node - NOTE the number
                     currentEvent.destinationNode = destNode;
                     currentEvent.sendingNode = sendNode;
+                    currentEvent.eventType = 'F';
                     strcpy(currentEvent.majorTime, timeStamp);
                     strcpy(currentEvent.transferDetails, msgDot);
                     //printf("current event: %s\ntimestamp: %s \n\n", currentEvent.transferDetails, currentEvent.majorTime);
