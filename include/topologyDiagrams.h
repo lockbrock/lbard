@@ -8,7 +8,24 @@
 #include <unistd.h>
 
 
+// ============= TEST DETAILS
+typedef struct TestDetails{
+    char testName[100];
+    char result[10];
+    char timeStarted[25];
+    char timeFinished[25];
+}TestDetails;
+
 // ============= EVENTS (for DOT diagram generation)
+typedef struct MinorEvents{
+    char majorTime[20];
+    char message[256];
+}MinorEvents;
+
+// This will store ALL (relevant) minor events, so we need a lot of space.
+static struct MinorEvents globalMinorEventArray[2000];
+int numGlobalMinorEvents = 0;
+
 typedef struct Events {
     char sendingNode;
     char destinationNode;
@@ -20,17 +37,13 @@ typedef struct Events {
     W : Wifi
     F : Fakeradio
     */
-    // An array of 100 strings each of length 256
-    //char minorEventList[256][100];
+    struct MinorEvents minorEventList[50];
     int numMinorEvents;
 }Events;
 
-// This will store ALL (relevant) minor events, so we need a lot of space.
-char globalMinorEventArray[2000][256];
 static struct Events listEvents[200];
 int listEventsLength = 0;
 int currentEventIndex = 0;
-int numGlobalMinorEvents = 0;
 
 
 // ============= FOR PROCESSING INPUT LOG
@@ -78,15 +91,24 @@ int indexRhizomeInterfaces[MAX_LINKS];
 char sidArray[26][65];
 int numSidArray = 0;
 
+// ============= CREATING LATEX FILE
+FILE *latexFile;
+
 
 // ============= FUNCTION PROTOTYPES
+void usage();
+
 void createDotFile();
+
+void create_latex_file(const struct Events ev, const char *outputImageName, const int isLastEvent);
 
 void setProcess(const char proc[]);
 
 int isLineRelevant(const char line[]);
 
 void print_rhizome_packets(char line[]);
+
+void print_rhizome_send_packet(char line[]);
 
 void print_rhizome_add_manifest(char line[]);
 
@@ -110,8 +132,10 @@ long timestamp_to_long(const char line[]);
 
 char get_node_from_sid(char sid[]);
 
+void add_to_minor_events(const char line[]);
+
 int eventSort (const void* a, const void* b);
 
-void add_to_minor_events(const char line[]);
+int minorEventSort (const void* a, const void* b);
 
 void writeLine(char line[], FILE* logFile);
