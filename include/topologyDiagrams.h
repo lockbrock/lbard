@@ -100,42 +100,48 @@ void usage();
 
 void createDotFile();
 
-void create_latex_file(const struct Events ev, const char *outputImageName, const int isLastEvent);
+void createLATEXFile(const struct Events ev, const char *outputImageName, const int isLastEvent);
 
 void setProcess(const char proc[]);
 
 int isLineRelevant(const char line[]);
 
-void print_rhizome_packets(char line[]);
+void writeRhizomePacket(char line[]);
 
-void print_rhizome_send_packet(char line[]);
+void writeRhizomeSendPacket(char line[]);
 
-void print_rhizome_add_manifest(char line[]);
+void writeRhizomeAddManifest(char line[]);
 
-void print_node_info(char line[]);
+void writeNodeInfo(char line[]);
 
-void print_lbard_bundle(char line[]);
+void writeLBARDBundle(char line[]);
 
-void print_lbard_send(char line[]);
+void writeLBARDSend(char line[]);
 
-void print_rhizome_layout(char line[]);
+void writeRhizomeLayout(char line[]);
 
-void print_fakeradio_bundle(char line[]);
+void writeFakeradioBundle(char line[]);
 
-char *timestamp_str(long tmpLong);
+char *longToTimestamp(long tmpLong);
 
-static char *convert_lbard_time(long initialTime, char *timeStamp);
+static char *convertLBARDTime(long initialTime, char *timeStamp);
 
-void fix_lbard_timestamp(char timeStamp[]);
+void fixLBARDTimestamp(char timeStamp[]);
 
-long timestamp_to_long(const char line[]);
+long timestampToLong(const char line[]);
 
-char get_node_from_sid(char sid[]);
+char getNodeFromSid(char sid[]);
 
-void add_to_minor_events(const char line[]);
+void addToMinorEvents(const char line[]);
 
-int eventSort (const void* a, const void* b);
+void shortenBID(const char longBID[], char shortBID[]);
 
-int minorEventSort (const void* a, const void* b);
 
-void writeLine(char line[], FILE* logFile);
+char shortenSID(const char longSID[], char shortSID[]);
+
+
+int eventSort(const void* a, const void* b);
+
+int minorEventSort(const void* a, const void* b);
+
+void writeLineToLog(char line[]);

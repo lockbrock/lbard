@@ -10,11 +10,13 @@
 
 /*
     TODO:
-    - Set writeline to use global variable file
     - Add shorten_bundle function -- too much repetition for now
     - ADD minor event: 14:47:38.169 SERVALD:C Neighbour BD149D5799D768E8CD72FF797611BF3C154C92F961D2D1E0662E02DFBBDB6573 has 951F4302854BFB92 that we need
     - Make simpleLog also have shortened BID and SIDs
     - Add more LBARD logging (if possible)
+    - Render LaTeX file
+    - Remove LaTeX build files (including images?)
+    - Deal with broadcast - for fakeradio and servald
 */
 
 int createDot = 0;
@@ -25,10 +27,9 @@ char outputFolder[150] = "";
 struct TestDetails testDetails;
 
 int main(int argc, char **argv){
+    // =============== Process arguments
     char inputFilename[150];
     char outputFilename[150] = "";
-    int bufferLength = 500;
-    char buffer[bufferLength];
 
     if (argc < 3){
         fprintf(stderr, "Invalid number of arguments.\n");
@@ -71,7 +72,7 @@ int main(int argc, char **argv){
         // Program exits if the file pointer returns NULL.
         exit(1);
     }else{
-        fprintf(stdout, "Input file: %s\n", inputFilename);
+        fprintf(stdout, "\nInput file: %s\n", inputFilename);
     }
 
     if ((outputFile = fopen(outputFilename,"w")) == NULL){
@@ -80,18 +81,24 @@ int main(int argc, char **argv){
         usage();
         exit(1);
     }else{
-        fprintf(stdout, "Output file: %s\n", outputFilename);
+        fprintf(stdout, "Output file: %s\n\n", outputFilename);
         // Erase the log file
         write(outputFile, "", 1);
     }
     if (createDot){
-        fprintf(stdout, "Creating a simple log file and dot files\n");
+        fprintf(stdout, "Creating a simple log file and dot files\n\n");
     }else{
-        fprintf(stdout, "Creating a simple log file\n");
+        fprintf(stdout, "Creating a simple log file\n\n");
     }
 
     setProcess("NONE");
     // TODO: Move this to a new function
+
+    // =============== Process input log file
+    int bufferLength = 500;
+    char buffer[bufferLength];
+
+
     while(fgets(buffer, bufferLength, fptr)) {
     // If line matches one of our important lines then send it to a function to pretty
     // the output and write it to the simple log file.
@@ -105,23 +112,23 @@ int main(int argc, char **argv){
                     // Do nothing, doesn't need to be printed.
                     break;
                 case RHIZOME_SEND_PACKET:
-                    print_rhizome_send_packet(buffer);
+                    writeRhizomeSendPacket(buffer);
                     break;
                 case RHIZOME_RECEIVE_PACKET:
-                    print_rhizome_packets(buffer);
+                    writeRhizomePacket(buffer);
                     break;
                 case RHIZOME_ADD_MANIFEST:
-                    print_rhizome_add_manifest(buffer);
+                    writeRhizomeAddManifest(buffer);
                     break;
                 case NODE_INFOMATION:
-                    print_node_info(buffer);
+                    writeNodeInfo(buffer);
                     break;
                 case LBARD_RECEIVE_PACKET:
                 case LBARD_NEW_BUNDLE:
-                    print_lbard_bundle(buffer);
+                    writeLBARDBundle(buffer);
                     break;
                 case LBARD_SEND_PACKET:
-                    print_lbard_send(buffer);
+                    writeLBARDSend(buffer);
                     break;
                 case FAKERADIO_RULES:
                     // So that once sorted fakeradio rules is up the top in the setup section
@@ -139,13 +146,13 @@ int main(int argc, char **argv){
                         allFakeradioLinks[numFakeradioLinks] = fl;
                         numFakeradioLinks += 1;
                     }
-                    writeLine(msg, outputFile);
+                    writeLineToLog(msg);
                     break;
                 case FAKERADIO_BUNDLE:
-                    print_fakeradio_bundle(buffer);
+                    writeFakeradioBundle(buffer);
                     break;
                 case RHIZOME_LAYOUT:
-                    print_rhizome_layout(buffer);
+                    writeRhizomeLayout(buffer);
                     break;
                 case -1:
                     printf("Error processing line: %s", buffer);
@@ -153,7 +160,7 @@ int main(int argc, char **argv){
                 case 0:
                     break;
                 default:
-                    writeLine(buffer, outputFile);
+                    writeLineToLog(buffer);
             }
         }
     }
@@ -172,7 +179,10 @@ int main(int argc, char **argv){
 
     return 0;
 }
-
+/**
+ *  Provides an error message and exits the program.
+ *  Called when malformed arguments are passed to the program
+ */
 void usage(){
     char *msg = "\n\
 Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|createPDF] [noclean]\n\
@@ -188,18 +198,29 @@ Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|cre
 
 /**
  *  The method used when creating dot files.
- *  Simply writes a new file that contains the entire network topology of the test
+ *  Writes n DOT files where n is the number of major events.
+ *  Creates an UNDIRECTED graph of the topology, with a DIRECTED edge between two nodes
+ *  from the sending node to the receiving node
  */
 void createDotFile(){
-    // TODO: Add check for requirements: latexmk and dot/neato
     char buffer[1000] = "";
 
-    // I'm keeping it all nicely formatted when it's produced so this bit is a little ugly
-    // The digraph needs to be strict since when network packets are shown they need to replace the
-    // links already shown. This /may/ be able to be removed if the processing to remove existing edges
-    // if a packet link is added
-    //size=\"11.7,8.3!\"\n
+    if (createImages || createLATEXFile){
+        if (system("neato -V &> /dev/null") != 0){
+            printf("\nError:    neato does not appear to be installed.\n          The program can not render .DOT files without this.\n");
+            exit(-1);
+        }
+        if (createPDF){
+            if (system("latexmk -v &> /dev/null") != 0){
+                printf("\nError:    latexmk does not appear to be installed.\n          The program can not create PDF files without this.\n");
+                exit(-1);
+            }
+        }
+    }
 
+
+    
+    // I'm keeping it all nicely formatted when it's produced so this bit is a little ugly
     const char *startText =  "\
 // Auto-generated by topologyDiagrams.c \n\
 digraph A {\n\
@@ -231,7 +252,7 @@ digraph A {\n\
         struct Events ev = listEvents[i];
         char tmpTimeMajor[20] = "";
         strcpy(tmpTimeMajor, ev.majorTime);
-        long timeStampMajor = timestamp_to_long(tmpTimeMajor);
+        long timeStampMajor = timestampToLong(tmpTimeMajor);
 
 
         int majorBeforeMinor = 1;
@@ -243,7 +264,7 @@ digraph A {\n\
             // Seems a little hacky but it works?
             char tmpTimeMinor[20] = "";
             strcpy(tmpTimeMinor, minorEvent.majorTime);
-            long timeStampMinor = timestamp_to_long(tmpTimeMinor);
+            long timeStampMinor = timestampToLong(tmpTimeMinor);
 
             if (timeStampMinor > timeStampMajor){
                 majorBeforeMinor = 0;
@@ -251,7 +272,7 @@ digraph A {\n\
             }else{
                 strcpy(ev.minorEventList[ev.numMinorEvents].majorTime, minorEvent.majorTime);
                 strcpy(ev.minorEventList[ev.numMinorEvents].message, minorEvent.message);
-                //printf("(%d) %s | %s\n", ev.numMinorEvents, ev.minorEventList[ev.numMinorEvents].majorTime, ev.minorEventList[ev.numMinorEvents].message);
+                //printf("%s | %s\n", ev.minorEventList[ev.numMinorEvents].majorTime, ev.minorEventList[ev.numMinorEvents].message);
                 ev.numMinorEvents += 1;
                 minorEventIndex++;
             }
@@ -259,7 +280,7 @@ digraph A {\n\
         // Now replace it back in the array
         listEvents[i] = ev;
     }
-    printf("Sorted all events\n");
+    //printf("Sorted all events\n");
     const char *endNodes = "\
     }\n";
     sprintf(buffer, "%s%s", buffer, endNodes);
@@ -327,6 +348,16 @@ digraph A {\n\
 
             // =============== Wifi Layout ===============  
             // For each interface, add the link
+            /**
+             *  This bit looks bad but let's explain.
+             *  Firstly, we loop through every single WiFi interface.
+             *  Then, we create ALL possible combinations of two nodes in this interface.
+             *  We do this because any one link can only exist between two nodes, however there
+             *  may be any number of unique combinations between nodes in an interface.
+             *  Then, we write this link to the file IFF it is not also the same link as was already printed
+             *  as a DIRECTED transfer for a major event.
+             *  This prevents double links between nodes.
+             */
             for(int interface = 0; interface < MAX_LINKS; interface++){
                 char listNodes[26] = "";
                 strcpy(listNodes, RhizomeInterfaces[interface]);
@@ -381,9 +412,9 @@ digraph A {\n\
 
                 if (i == listEventsLength -1){
                     // If last one, pass a 1 to add the 'end{document} bit'
-                    create_latex_file(ev, shortImageName, 1);
+                    createLATEXFile(ev, shortImageName, 1);
                 }else{
-                    create_latex_file(ev, shortImageName, 0);
+                    createLATEXFile(ev, shortImageName, 0);
                 }
             }
             numFile++;
@@ -397,9 +428,25 @@ digraph A {\n\
     //fclose(latexFile);
 }
 
-// TODO: Put my functions/variables in a consistent format.. this is just bad
+/**
+ *  Write the LaTeX file for each of the events.
+ *  Creates one portrait A4 page per event. 
+ *  Layout:
+ *  |---------------|
+ *  |Test details   |
+ *  |Event time     |
+ *  |        Diagram|
+ *  |Each log line  |
+ *  |---------------|
+ *  Diagram is right aligned so that any text (which will extend the page to the left)
+ *  /should/ not skew the diagram - meaning that the resultant diagrams /should/ be all in the same spot
+ *  Frankly, this is a little hacky, however I have no clue how to ensure that the diagram shape doesn't change
+ *  when the text length changes for a transfer
+ * 
+ *  Should be self explanatory. Just formatting strings then writing them to the file
+ */
 int firstLine = 1;
-void create_latex_file(const struct Events ev, const char *outputImageName, const int isLastEvent){
+void createLATEXFile(const struct Events ev, const char *outputImageName, const int isLastEvent){
     char latexFilename[250] = "";
     sprintf(latexFilename, "%sdiagrams.tex", outputFolder);
 
@@ -480,22 +527,17 @@ void setProcess(const char proc[]){
         // Should ALWAYS be the first line
         sprintf(buffer, "#%03d ====== BEGIN SETUP ======\n", 0);
         setupLineNumber += 1;
-        writeLine(buffer, outputFile);
+        writeLineToLog(buffer);
     }else if (!strcmp(process, "SETUP")) {
         // Ideally we don't have more than 99 lines in the setup. If so, just increase the 100
         sprintf(buffer, "#%03d ======= END SETUP =======\n", 100);
-        writeLine(buffer, outputFile);
+        writeLineToLog(buffer);
     }
     strcpy(process, proc);
 }
 
 
-// Store the SID of the destination in the mdprequests
-char rhizomeDestination[65] = "";
-char frameMessage[100] = "";
-char frameBID[65] = "";
-char dotMsg[256] = "";
-int readyToSend = 0;
+
 
 /**
  *  Checks if the line sent to it is a line relevant to the simple log file
@@ -546,28 +588,28 @@ int isLineRelevant(const char line[]){
             strcpy(testDetails.testName, tmpName);
             setupLineNumber += 1;
             sprintf(tmp, "#%03d %s", setupLineNumber, line);
-            writeLine(tmp, outputFile);
+            writeLineToLog(tmp);
         } else if (strstr(line, "Result:")){
             char tmpResult[10] = "";
             sscanf(line, "Result: %[^\n\t]", tmpResult);
             strcpy(testDetails.result, tmpResult);
             setupLineNumber += 1;
             sprintf(tmp, "#%03d %s", setupLineNumber, line);
-            writeLine(tmp, outputFile);
+            writeLineToLog(tmp);
         }else if (strstr(line, "Started:")){
             char tmpStart[25] = "";
             sscanf(line, "Started: %[^\n\t]", tmpStart);
             strcpy(testDetails.timeStarted, tmpStart);
             setupLineNumber += 1;
             sprintf(tmp, "#%03d %s", setupLineNumber, line);
-            writeLine(tmp, outputFile);
+            writeLineToLog(tmp);
         }else if (strstr(line, "Finished:")){
             char tmpFinish[25] = "";
             sscanf(line, "Finished: %[^\n\t]", tmpFinish);
             strcpy(testDetails.timeFinished, tmpFinish);
             setupLineNumber += 1;
             sprintf(tmp, "#%03d %s", setupLineNumber, line);
-            writeLine(tmp, outputFile);
+            writeLineToLog(tmp);
         }
     }
 
@@ -618,7 +660,7 @@ int isLineRelevant(const char line[]){
     if (strcmp(process, "LBARD") == 0){
         if (strstr(line, "executeOk --core-backtrace --timeout=600 --executable=lbard")){
             //18:45:06.376 # executeOk --core-backtrace --timeout=600 --executable=lbard --stdout-file=E_LBARDOUT --stderr-file=E_LBARDERR 127.0.0.1:4114 lbard:lbard 9280164C7615E9E61E954219E39B531BB5CF032EA1BCE6CFF0A21ED517FE1A5A FEC1C61CCE2A2E70FE4135C6463980D907915FDA12F352C2C1A567FB1B35A76A /dev/pts/6 announce pull bundles
-            lbardInitialTime = timestamp_to_long(line);
+            lbardInitialTime = timestampToLong(line);
         }
         if(strstr(line, "HAS some bundle")){
             return LBARD_RECEIVE_PACKET;
@@ -654,7 +696,20 @@ int isLineRelevant(const char line[]){
     return 0;
 }
 
-void print_rhizome_send_packet(char line[]){
+
+// Store the SID of the destination in the mdprequests
+char rhizomeDestination[65] = "";
+char frameMessage[100] = "";
+char frameBID[65] = "";
+char dotMsg[256] = "";
+int readyToSend = 0;
+/**
+ *  Writes the message to the log file.
+ *  Formats the lines in a nice way first though.
+ *  NOTE: above global variables are because Send packet lines go over multiple lines so we need
+ *  to be able to store them between function calls 
+ */
+void writeRhizomeSendPacket(char line[]){
     //14:47:38.214 SERVALD:B Sending 951F4302854BFB92 50 bytes (now 50 of 50)
     char msg[1000] = "";
     char timeStamp[16];
@@ -680,7 +735,7 @@ void print_rhizome_send_packet(char line[]){
             sscanf(tempMsg, "%s %s %s %s %s %s %s %s %[^:]", &tmp, &tmp, &tmp, &tmp, &tmp, &tmp, &tmp, &tmp, &rhizomeDestination);
             readyToSend = 1;
         }
-        writeLine(msg, outputFile);
+        writeLineToLog(msg);
     }
     if (strstr(line, "Send frame")){
         // TODO: Add it so it actually logs the same as this!!
@@ -695,7 +750,7 @@ void print_rhizome_send_packet(char line[]){
             // Now we make this into a major event
             
             //[SEND_MANIFEST] Send frame 464 bytes to 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052
-            char sidChar = get_node_from_sid(rhizomeDestination);
+            char sidChar = getNodeFromSid(rhizomeDestination);
             struct Events currentEvent;
             currentEvent.destinationNode = sidChar;
             currentEvent.sendingNode = instanceChar;
@@ -713,7 +768,7 @@ void print_rhizome_send_packet(char line[]){
             memset(frameMessage, 0, strlen(frameMessage));
             readyToSend = 0;
         }else if (readyToSend){
-            writeLine(msg, outputFile);
+            writeLineToLog(msg);
         }else{
             return 0;
         }
@@ -729,7 +784,7 @@ void print_rhizome_send_packet(char line[]){
             sscanf(line, "%s %s %s %s %[^\t\n]", &tmp, &tmp, &tmp, &tmp, &tempTransferMessage);
             sscanf(tempTransferMessage, "%s %s %s %s %[^\t\n]", &tmp, &tmp, &tmp, &frameMessage, &frameBID);
         }
-        writeLine(msg, outputFile);
+        writeLineToLog(msg);
     }
 }
 
@@ -738,7 +793,7 @@ void print_rhizome_send_packet(char line[]){
  *  Simply prints the relevant lines in a nicely formatted and consistent 
  *  manner
  */
-void print_rhizome_packets(char line[]){
+void writeRhizomePacket(char line[]){
 // Both the send and receive use the same format
     char msg[1000] = "";
     char timeStamp[16];
@@ -753,16 +808,21 @@ void print_rhizome_packets(char line[]){
     // format: [timestamp] SERVALD:[X] [details]
     sprintf(msg, "%s SERVALD:%c %s\n", timeStamp, instanceChar, details);
 
+    // TODO: Fix this so that the shortening happens regardless
     if (createDot){
         // Filter MUCH more
         if (strstr(msg, "Ignoring added")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
+            writeLineToLog(msg);
         }else if (strstr(msg, "Sending message")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
+            writeLineToLog(msg);
         }else if (strstr(msg, "Queueing next message")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
+            writeLineToLog(msg);
         }else if (strstr(msg, "Send frame")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
+            writeLineToLog(msg);
         }else if (strstr(msg, "Connection closed")){
             // Format; change SID to 8 char and Node Char, otherwise takes up too much room on the diagram
             // 14:47:44.263 SERVALD:B Connection closed F4FB12D2083C49F62D753CEB5ACA846024AA2CF4CF8E09FAB48E7F9699F30C4D
@@ -770,12 +830,11 @@ void print_rhizome_packets(char line[]){
             char newMsg[1000] = "";
             char process[20] = "";
             sscanf(msg, "%s %s %s %s %s", &timeStamp, &process, &tmp, &tmp, &longSID);
-            char shortSID[9] = "";
-            memcpy(shortSID, &longSID[0], 8);
-            shortSID[8] = '\0';
-            char nodeChar = get_node_from_sid(shortSID);
+            char shortSID[10] = "";
+            char nodeChar = shortenSID(longSID, shortSID);
             sprintf(newMsg, "%s %s Connection closed %s* (Node %c)", timeStamp, process, shortSID, nodeChar);
-            add_to_minor_events(newMsg);
+            addToMinorEvents(newMsg);
+            writeLineToLog(newMsg);
         }else if (strstr(msg, "Processing message from")){
             //Do the same as above (but different format)
             //14:47:29.058 SERVALD:B Processing message from F4FB12D2083C49F62D753CEB5ACA846024AA2CF4CF8E09FAB48E7F9699F30C4D
@@ -783,15 +842,15 @@ void print_rhizome_packets(char line[]){
             char newMsg[1000] = "";
             char process[20] = "";
             sscanf(msg, "%s %s %s %s %s %s", &timeStamp, &process, &tmp, &tmp, &tmp, &longSID);
-            char shortSID[9] = "";
-            memcpy(shortSID, &longSID[0], 8);
-            shortSID[8] = '\0';
-            char nodeChar = get_node_from_sid(shortSID);
-            sprintf(newMsg, "%s %s Processing message from %s* (Node %c)", timeStamp, process, shortSID, nodeChar);
-            add_to_minor_events(newMsg);
+            char shortSID[10] = "";
+            char nodeChar = shortenSID(longSID, shortSID);
+            sprintf(newMsg, "%s %s Processing message from %s* (Node %c)\n", timeStamp, process, shortSID, nodeChar);
+            addToMinorEvents(newMsg);
+            writeLineToLog(newMsg);
         }
+    }else{
+        writeLineToLog(msg);
     }
-    writeLine(msg, outputFile);
 }
 
 /**
@@ -799,7 +858,7 @@ void print_rhizome_packets(char line[]){
  *  Simply prints the relevant lines in a nicely formatted and consistent 
  *  manner
  */
-void print_rhizome_add_manifest(char line[]){
+void writeRhizomeAddManifest(char line[]){
     //INFO: [287944] 13:10:19.844 [httpd/4] rhizome_database.c:1501:rhizome_add_manifest_to_store()  RHIZOME ADD MANIFEST service=file bid=3889B11DAFB5C6814EFB77EA2D4BE65F059D5006F08933D3C37CA1AD764D5FAA version=1595389191543
     char msg[1000] = "";
     char timeStamp[16];
@@ -807,7 +866,7 @@ void print_rhizome_add_manifest(char line[]){
     char details[500];
     sscanf(line, "%s %s %s %s %s %[^\t\n]", &tmp, &tmp, &timeStamp, &tmp, &tmp, &details);
     sprintf(msg, "%s SERVALD:%c %s\n", timeStamp, instanceChar, details);
-    writeLine(msg, outputFile);
+    writeLineToLog(msg);
 }
 
 /**
@@ -816,7 +875,7 @@ void print_rhizome_add_manifest(char line[]){
  *  manner
  *  Saves each SID to an array so we can convert SIDs to node chars easily
  */
-void print_node_info(char line[]){
+void writeNodeInfo(char line[]){
     char instance[5] = "";
     // SID is always 64 chars long.. We need the \0 at the end so 65
     char sid[65] = "";
@@ -836,7 +895,7 @@ void print_node_info(char line[]){
         numSidArray += 1;
         sprintf(msg, "#%03d %s : %s\n", setupLineNumber, instance, sid);
         setupLineNumber += 1;
-        writeLine(msg, outputFile);
+        writeLineToLog(msg);
     }    
 }
 
@@ -846,7 +905,7 @@ void print_node_info(char line[]){
  *  Simply prints the relevant lines in a nicely formatted and consistent 
  *  manner
  */
-void print_lbard_bundle(char line[]){
+void writeLBARDBundle(char line[]){
     //>>> [13:10.21.821 7408*] Peer 7a43982622b4* HAS some bundle that we don't have (key prefix=48CC*).
     //>>> [18:45.25.432 3F76*] We have the entire bundle 92aefeabda1687ad*/1595582106764 now.
     char msg[1000] = "";
@@ -855,7 +914,7 @@ void print_lbard_bundle(char line[]){
     char details[500];
     char t = '=';
     sscanf(line, ">>> %c %s %s %[^\t\n]", &t, &timeStamp, &tmp, &details);
-    fix_lbard_timestamp(timeStamp);
+    fixLBARDTimestamp(timeStamp);
 
     if (strstr(line, "We have new bundle")){
         // We have new bundle EB7E8ABC39C548D939C5AB1E0015B7D5389D7C3FFBD1BE44439DC7C0A5F6730C/1596604638358
@@ -863,10 +922,7 @@ void print_lbard_bundle(char line[]){
         char tmpDetails[500] = "";
         sscanf(details, "We have new bundle %[^/]", &longBID);
         char shortBID[10] = "";
-        memcpy(shortBID, &longBID[0], 8);
-        strcpy(details, "");
-        shortBID[8] = '*';
-        shortBID[9] = '\0';
+        shortenBID(longBID, shortBID);
         sprintf(details, "We have new bundle %s", shortBID);
     }else if (strstr(line, "We have the entire bundle")){
         // We have the entire bundle eb7e8abc39c548d9*/1596604638358 now.
@@ -874,14 +930,7 @@ void print_lbard_bundle(char line[]){
         char tmpDetails[500] = "";
         sscanf(details, "We have the entire bundle %[^/]", &longBID);
         char shortBID[10] = "";
-        memcpy(shortBID, &longBID[0], 8);
-        strcpy(details, "");
-        shortBID[8] = '*';
-        shortBID[9] = '\0';
-        // Make it uppercase
-        for (int i = 0; i < 10; i++){
-            shortBID[i] = toupper(shortBID[i]);
-        }
+        shortenBID(longBID, shortBID);
         sprintf(details, "We have the entire bundle %s", shortBID);
     }else if (strstr(line, "HAS some bundle")){
         // Covert SID to node char
@@ -890,15 +939,15 @@ void print_lbard_bundle(char line[]){
     }
 
     sprintf(msg, "%s LBARD:%c %s\n", timeStamp, instanceChar, details);
-    writeLine(msg, outputFile);
+    writeLineToLog(msg);
 
     if (createDot){
         if (strstr(line, "We have new bundle")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
         }else if (strstr(line, "We have the entire bundle")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
         }else if (strstr(line, "HAS some bundle")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
         }
     }
 }
@@ -909,14 +958,14 @@ void print_lbard_bundle(char line[]){
  *  Simply prints the relevant lines in a nicely formatted and consistent 
  *  manner
  */
-void print_lbard_send(char line[]){
+void writeLBARDSend(char line[]){
     //T+27471ms : Sending length of bundle 92AEFEABDA1687ADC16BBECFD5B09A66296DE14F6D2007474212601FA0933B5C (bundle #0, version 1595582106764, cached_version 1595582106764)
     char msg[1000] = "";
     char timeStamp[50] = "";
     char tmp[100] = "";
     char details[500] = "";
     sscanf(line, "%s %s %[^:\t\n]", &timeStamp, &tmp,  &details);
-    const char* timestamp = convert_lbard_time(lbardInitialTime, timeStamp);
+    const char* timestamp = convertLBARDTime(lbardInitialTime, timeStamp);
 
     if (strstr(line, "length of bundle")){
         // Format so the BID is 8 chars
@@ -925,10 +974,7 @@ void print_lbard_send(char line[]){
         char tmpDetails[500] = "";
         sscanf(details, "%s %s %s %s %s %[^\n\t]", &tmp, &tmp, &tmp, &tmp, &longBID, &details);
         char shortBID[10] = "";
-        memcpy(shortBID, &longBID[0], 8);
-        strcpy(details, "");
-        shortBID[8] = '*';
-        shortBID[9] = '\0';
+        shortenBID(longBID, shortBID);
         sprintf(details, "Sending length of bundle %s %s", shortBID, tmpDetails);
     }else if (strstr(line, "Resending bundle")){
         // Also format so BID is 8 chars (diff. format)
@@ -936,22 +982,19 @@ void print_lbard_send(char line[]){
         char longBID[65] = "";
         sscanf(details, "%s %s %s", &tmp, &tmp, &longBID);
         char shortBID[10] = "";
-        memcpy(shortBID, &longBID[0], 8);
-        strcpy(details, "");
-        shortBID[8] = '*';
-        shortBID[9] = '\0';
+        shortenBID(longBID, shortBID);
         sprintf(details, "Resending bundle %s from the start.", shortBID);
     }
 
     sprintf(msg, "%s LBARD:%c %s\n", timestamp,
         instanceChar, details);
-    writeLine(msg, outputFile);
+    writeLineToLog(msg);
 
     if (createDot){
         if (strstr(line, "Resending bundle")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
         }else if (strstr(line, "Sending length")){
-            add_to_minor_events(msg);
+            addToMinorEvents(msg);
         }
     }
 
@@ -961,7 +1004,7 @@ void print_lbard_send(char line[]){
  *  For printing the rhizome layout of a network test.
  *  Just filters the given line for the instance ID, and what wifi interface it is connected to
  */
-void print_rhizome_layout(char line[]){
+void writeRhizomeLayout(char line[]){
     char msg[1000] = "";
     char tmp[100] = "";
     char instChar = '-';
@@ -978,7 +1021,7 @@ void print_rhizome_layout(char line[]){
         indexRhizomeInterfaces[interface] += 1;        
     }
     setupLineNumber += 1;
-    writeLine(msg, outputFile);
+    writeLineToLog(msg);
 }
 
 
@@ -993,7 +1036,7 @@ void print_rhizome_layout(char line[]){
  */
 char timeStamp[20] = "";
 char msgDot[256] = "";
-void print_fakeradio_bundle(char line[]){
+void writeFakeradioBundle(char line[]){
     int bufferLength = 255;
     char buffer[bufferLength];
     char msg[bufferLength];
@@ -1014,7 +1057,7 @@ void print_fakeradio_bundle(char line[]){
 
     //>>> [16:38.12.334 RADIO] @ T+14666ms: 53 bytes, 2 packets, 24 sync bytes, 0 manifest bytes, 0 body bytes, 0 colissions, 26.9% channel utilisation.
     sscanf(line, "%s %c %[^R]", &tmp, &tmpC, timeStamp);
-    fix_lbard_timestamp(timeStamp);
+    fixLBARDTimestamp(timeStamp);
 
     int hasMessage = 0;
     
@@ -1033,9 +1076,7 @@ void print_fakeradio_bundle(char line[]){
                     // Decrease the BID to just the first 8 characters for the DOT file
                     // (otherwise, we have very wide diagrams)
                     char shortBID[10] = "";
-                    memcpy(shortBID, &bundleID[0], 8);
-                    shortBID[8] = '*';
-                    shortBID[9] = '\0';
+                    shortenBID(bundleID, shortBID);
 
                     if (strcmp(startBytes, "")){
                         sprintf(msg, "%sFAKERADIO %c -> %c [partial bundle]  bid=%s [%s to %s. Total: %s bytes]\n", timeStamp, sendNode, destNode, bundleID, startBytes, endBytes, byteLength);
@@ -1053,7 +1094,6 @@ void print_fakeradio_bundle(char line[]){
                 }
                 if (createDot){
                     struct Events currentEvent;
-                    // Make sure to convert to the alpha representation of the node - NOTE the number
                     currentEvent.destinationNode = destNode;
                     currentEvent.sendingNode = sendNode;
                     currentEvent.eventType = 'F';
@@ -1066,7 +1106,7 @@ void print_fakeradio_bundle(char line[]){
                     memset(msgDot, 0, strlen(msgDot));
                     //memset(timeStamp, 0, strlen(timeStamp));
                 }
-                writeLine(msg, outputFile);
+                writeLineToLog(msg);
                 hasMessage = 0;
             }
         }else{
@@ -1134,7 +1174,7 @@ void print_fakeradio_bundle(char line[]){
  *  NOTE: May break at times around midnight, this has not been tested.
  */
 char timeStampConvert[20];
-char *timestamp_str(long tmpLong){
+char *longToTimestamp(long tmpLong){
     memset(timeStampConvert, 0, strlen(timeStampConvert));
 
     time_t time = tmpLong /1000;
@@ -1154,7 +1194,7 @@ char *timestamp_str(long tmpLong){
  * NOTE: Most of the time, this will be called with lbardInitialTime as
  * the first variable.
  */
-char *convert_lbard_time(long initialTime, char *timeStamp){
+char *convertLBARDTime(long initialTime, char *timeStamp){
     // Get the number out of the timestamp
     // T+44432ms
     char tmp[10] = "";
@@ -1169,7 +1209,7 @@ char *convert_lbard_time(long initialTime, char *timeStamp){
     long timeStampMilli = atoi(timeStamp) + initialTime; 
     
     // Convert to timestamp
-    char* buf = timestamp_str(timeStampMilli);
+    char* buf = longToTimestamp(timeStampMilli);
     return buf;
 }
 
@@ -1177,7 +1217,7 @@ char *convert_lbard_time(long initialTime, char *timeStamp){
  * Fixes LBARD timestamps so they are consistent with servald timestamps
  * Simply a matter of removing a '[' and changing a '.' to a ':'
  */
-void fix_lbard_timestamp(char timeStamp[]){
+void fixLBARDTimestamp(char timeStamp[]){
     // Timestamp still has that beginning [ so cut that off.
     char* timeStampPtr = timeStamp + 1;
     //strcpy(timeStamp, timeStampPtr);
@@ -1196,7 +1236,7 @@ void fix_lbard_timestamp(char timeStamp[]){
  *  00:00:00.000 that day.
  *  NOTE: May break around midnight, this is untested 
  */
-long timestamp_to_long(const char timeStamp[20]){
+long timestampToLong(const char timeStamp[20]){
     // Why do we do it like this and not just change LBARD?
     /// Well, hypothetical question, this is because we are going to be comparing these logs
     // against existing topologies and we don't want to have to update LBARD on them too!
@@ -1232,7 +1272,7 @@ long timestamp_to_long(const char timeStamp[20]){
  *  Utility function. Simply returns the single character identifier (A/B/C/etc.) of a given node based
  *  off of its SID.
  */
-char get_node_from_sid(char sid[]){
+char getNodeFromSid(char sid[]){
     for (int i = 0; i < numSidArray; i++){
         if (strstr(sidArray[i], sid)){
             return i+65;
@@ -1244,16 +1284,36 @@ char get_node_from_sid(char sid[]){
 /**
  *  Utility function. Allows us to easily add lines to the minor event list
  */
-void add_to_minor_events(const char line[]){
+void addToMinorEvents(const char line[]){
     char timestamp[25] = "";
     char restOfMessage[256] = "";
-    sscanf(line, "%s %[^\t\n]", timeStamp, restOfMessage);
+    sscanf(line, "%s %[^\t\n]", timestamp, restOfMessage);
     struct MinorEvents minorEvent;
-    strcpy(minorEvent.majorTime, timeStamp);
+    strcpy(minorEvent.majorTime, timestamp);
     strcpy(minorEvent.message, restOfMessage);
 
     globalMinorEventArray[numGlobalMinorEvents] = minorEvent;
     numGlobalMinorEvents += 1;
+}
+
+void shortenBID(const char longBID[], char shortBID[]){
+    memcpy(shortBID, &longBID[0], 8);
+    shortBID[8] = '*';
+    shortBID[9] = '\0';
+    // Make it uppercase
+    for (int i = 0; i < 9; i++){
+        shortBID[i] = toupper(shortBID[i]);
+    }
+}
+
+char shortenSID(const char longSID[], char shortSID[]){
+    memcpy(shortSID, &longSID[0], 8);
+    // NOTE: We don't put a * because it makes the matching not work 
+    shortSID[9] = '\0';
+    for (int i = 0; i < 9; i++){
+        shortSID[i] = toupper(shortSID[i]);
+    }
+    return getNodeFromSid(shortSID);
 }
 
 /**
@@ -1268,8 +1328,8 @@ int eventSort(const void* a, const void* b){
 
     strcpy(timeStampA, elem1->majorTime);
     strcpy(timeStampB, elem2->majorTime);
-    long timeStampALong = timestamp_to_long(timeStampA);
-    long timeStampBLong = timestamp_to_long(timeStampB);
+    long timeStampALong = timestampToLong(timeStampA);
+    long timeStampBLong = timestampToLong(timeStampB);
 
     if(timeStampALong < timeStampBLong){
         return -1;
@@ -1291,8 +1351,8 @@ int minorEventSort(const void* a, const void* b){
 
     strcpy(timeStampA, elem1->majorTime);
     strcpy(timeStampB, elem2->majorTime);
-    long timeStampALong = timestamp_to_long(timeStampA);
-    long timeStampBLong = timestamp_to_long(timeStampB);
+    long timeStampALong = timestampToLong(timeStampA);
+    long timeStampBLong = timestampToLong(timeStampB);
 
     if(timeStampALong < timeStampBLong){
         return -1;
@@ -1302,7 +1362,10 @@ int minorEventSort(const void* a, const void* b){
     return 0;  
 }
 
-void writeLine(char line[], FILE* logFile){
+/**
+ * Utility function, just writes the given line to the output log file
+ */
+void writeLineToLog(char line[]){
     // TODO: Just call the global variable instead of passing it every time, unnecessary
-    fputs(line, logFile);
+    fputs(line, outputFile);
 }
