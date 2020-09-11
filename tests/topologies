@@ -194,6 +194,23 @@ test_RFD900_Chain(){
    wait_until --timeout=180 j_received_bundle
 }
 
+doc_Wifi_RFD900_Chain_Short="100 byte bndle across chain of 5 WIFI/UHF links"
+setup_Wifi_RFD900_Chain_Short(){
+   setupN "+A +B +C +D +E +F"  "rfd900,rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 2,3;  allow between 4,5; deny all;"
+   
+   foreach_instance +B +C add_servald_interface 1
+   foreach_instance +D +E add_servald_interface 2
+
+   set_instance +A
+   rhizome_add_file file1 100
+}
+test_Wifi_RFD900_Chain_Short(){
+   f_received_bundle(){
+      bundle_received_by $BID:$VERSION +F
+   }
+   wait_until --timeout=180 f_received_bundle
+}
+
 doc_Wifi_RFD900_Chain="100 byte bundle along chain of 10 WIFI/UHF links"
 setup_Wifi_RFD900_Chain(){
    # Ooof long setup line..
