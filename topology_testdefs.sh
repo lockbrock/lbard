@@ -111,7 +111,7 @@ setupN(){
    # TODO: Add packet loss
    lbardparams="$3"
    # Show proper debug info
-   lbardflags="bundles"
+   lbardflags="bundles pieces ack announce message_pieces sync"
    
    # Get array of radio types
    tfw_log "\$2 is: $2"

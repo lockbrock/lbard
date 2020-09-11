@@ -37,11 +37,11 @@ typedef struct Events {
     W : Wifi
     F : Fakeradio
     */
-    struct MinorEvents minorEventList[50];
+    struct MinorEvents minorEventList[200];
     int numMinorEvents;
 }Events;
 
-static struct Events listEvents[200];
+static struct Events listEvents[1000];
 int listEventsLength = 0;
 int currentEventIndex = 0;
 

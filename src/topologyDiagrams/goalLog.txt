@@ -269,9 +269,23 @@ GLOBAL MINOR EVENTS
 
 15:23:17.922 SERVALD:B Neighbour 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052 has now received 15EB502E2D2D9521
 
-
+14:47:38.169 SERVALD:C Neighbour BD149D5799D768E8CD72FF797611BF3C154C92F961D2D1E0662E02DFBBDB6573 has 951F4302854BFB92 that we need
 TODO: Combine send/req manifest with send frame?
 
+
+/========== TO DO: ===============
+14:47:38.214 SERVALD:B Clearing SEND_PAYLOAD 951F4302854BFB92
+14:47:38.214 SERVALD:B FREE manifest 0x5588027fee50
+14:47:38.214 SERVALD:B Queued transfer message SEND_PAYLOAD 951F4302854BFB92
+14:47:38.214 SERVALD:B Sending 951F4302854BFB92 50 bytes (now 50 of 50)
+
+
+14:47:38.240 SERVALD:C Processing sync message SEND_PAYLOAD 951F4302854BFB92 -1
+14:47:38.240 SERVALD:C Wrote to 951F4302854BFB92 50, now 50 of 50
+14:47:38.242 SERVALD:C ADD MANIFEST service=file bid=EB7E8ABC39C548D939C5AB1E0015B7D5389D7C3FFBD1BE44439DC7C0A5F6730C version=1596604638358
+14:47:38.242 SERVALD:C Adding 951F4302854BFB92 to tree
+
+//LBARD:B Peer de0e276fb5f1* HAS some bundle that we don't have (key prefix=0A27*).
 
 ####################################################################################################################
 ####################################################################################################################
@@ -295,3 +309,46 @@ MAJOR EVENTS
 
 ####################################################################################################################
 ####################################################################################################################
+
+
+LBARD
+### [11:58.41.550 42E2*] : Handler consumed 12 packet bytes.
+packet before decode_rs:
+0000:  A9 A3 AB 70 7A EA 0B 00 53 0C 80 40 24 99 CE 9F  ...pz...S..@$...
+0010:  A2 ED 84 FB 69 3A FC 3B F5 EA 01 67 37 7A 87 26  ....i:.;...g7z.&
+0020:  42 D2 9F 3B BE 07 E6 28 43 B4 B9 3E E7 2D 5C BE  B..;...(C..>.-\.
+0030:  20 9B D5 1D   ...            
+received packet:
+0000:  A9 A3 AB 70 7A EA 0B 00 53 0C 80 40 24 99 CE 9F  ...pz...S..@$...
+0010:  A2 ED 84 FB 69 3A FC 3B F5 EA 01 67 37 7A 87 26  ....i:.;...g7z.&
+0020:  42 D2 9F 3B BE 07 E6 28 43 B4 B9 3E E7 2D 5C BE  B..;...(C..>.-\.
+0030:  20 9B D5 1D   ...            
+Decoding message #11 from a9a3ab707aea*, length = 20:
+
+Registering peer 42e2d48d1826*
+
+###>>> [11:58.32.136 A9A3*] I just sent manifest piece [128,258) for 42e2d48d1826*.
+
+
+### [11:58.40.559 42E2*] : Calling message handler for type 'S' @ offset 0xd
+
+
+###########
+Add broadcast stuff
+If no specified type, then assume sync/frame 
+
+Filter and enqueue 52 bytes from 5 -> -1
+>>> [11:58.32.036 C261*] Packet #11 : length=52 bytes
+>>> [11:58.32.036 RADIO] @ T+15687ms: 220 bytes, 11 packets, 132 sync bytes, 0 manifest bytes, 0 body bytes, 0 colissions, 3.1% channel utilisation.
+Filter and enqueue 52 bytes from 5 -> 0
+Dropped packet due to rule #3
+Filter and enqueue 52 bytes from 5 -> 1
+Dropped packet due to rule #3
+Filter and enqueue 52 bytes from 5 -> 2
+Dropped packet due to rule #3
+Filter and enqueue 52 bytes from 5 -> 3
+Dropped packet due to rule #3
+Filter and enqueue 52 bytes from 5 -> 4
+Keeping packet due to rule #2
+Filter and enqueue 65 bytes from 2 -> -1
+>>> [11:58.32.087 68F2*] Packet #12 : length=65 bytes
