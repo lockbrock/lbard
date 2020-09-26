@@ -115,7 +115,8 @@ int sync_tree_receive_message(struct peer_state *p,unsigned char *msg)
   int len=msg[1];
 
   if (debug_sync)
-    printf("Receiving sync tree message of %d bytes\n",len);
+    printf(">>> %s Receiving sync tree message of %d bytes from %s\n", timestamp_str(),
+    len, p->sid_prefix);
       
   // Pull out the sync tree message for processing.
   int sync_bytes=len-SYNC_MSG_HEADER_LEN;

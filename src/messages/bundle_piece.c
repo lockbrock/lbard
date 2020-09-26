@@ -83,10 +83,13 @@ int sync_append_some_bundle_bytes(int bundle_number,int start_offset,int len,
 
   if (actual_bytes<0) return -1;
 
-  printf(">>> %s I just sent %s piece [%d,%d) for %s*.\n",
+  printf(">>> %s I just sent %s piece [%d,%d) of %s* for %s* (filling %d of the %d remaining packet bytes).\n",
 	 timestamp_str(),is_manifest?"manifest":"body",
 	 start_offset,start_offset+actual_bytes,
-	 peer_records[target_peer]->sid_prefix);
+	 bundles[bundle_number].bid_hex,
+	 peer_records[target_peer]->sid_prefix,
+	 actual_bytes+21,max_bytes+21);
+
   peer_update_request_bitmaps_due_to_transmitted_piece(bundle_number,is_manifest,
 						       start_offset,actual_bytes);
   dump_peer_tx_bitmap(target_peer);

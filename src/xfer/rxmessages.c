@@ -87,7 +87,7 @@ int saw_message(unsigned char *msg,int len,int rssi,char *my_sid,
     p->last_message_number=-1;
     p->tx_bundle=-1;
     p->request_bitmap_bundle=-1;
-    printf("Registering peer %s*\n",p->sid_prefix);
+    printf(">>> %s Registering peer %s*\n",timestamp_str(), p->sid_prefix);
     if (peer_count<MAX_PEERS) {
       peer_records[peer_count++]=p;      
     } else {

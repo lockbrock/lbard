@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <regex.h>     
 #include <pcre.h>
@@ -70,6 +71,7 @@ enum lineType{
     NODE_INFOMATION = 10,
     FAKERADIO_BUNDLE = 11,
     RHIZOME_LAYOUT = 12,
+    LBARD_SYNC_MESSAGE = 13,
 };
 
 // ============= NETWORK LAYOUT
@@ -104,7 +106,7 @@ void createLATEXFile(const struct Events ev, const char *outputImageName, const 
 
 void setProcess(const char proc[]);
 
-int isLineRelevant(const char line[]);
+int isLineRelevant(char line[]);
 
 void writeRhizomePacket(char line[]);
 
@@ -118,6 +120,8 @@ void writeLBARDBundle(char line[]);
 
 void writeLBARDSend(char line[]);
 
+void writeLBARDSync(char line[]);
+
 void writeRhizomeLayout(char line[]);
 
 void writeFakeradioBundle(char line[]);
@@ -128,7 +132,7 @@ static char *convertLBARDTime(long initialTime, char *timeStamp);
 
 void fixLBARDTimestamp(char timeStamp[]);
 
-long timestampToLong(const char line[]);
+long timestampToLong(char line[]);
 
 char getNodeFromSid(char sid[]);
 

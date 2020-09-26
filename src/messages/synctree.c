@@ -74,7 +74,7 @@ int sync_tree_send_message(int *offset,int mtu, unsigned char *msg_out)
   append_bytes(offset,mtu,msg_out,msg,len);
 
   // Record in retransmit buffer
-  // printf("Sending sync message (length now = $%02x, used %d)\n",*offset,used);
+  printf(">>> %s Sending sync message (length now = $%02x, used %d)\n",timestamp_str(),*offset,used);
 
   
   return 0;

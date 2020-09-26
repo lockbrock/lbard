@@ -397,13 +397,20 @@ test_Lab_Message(){
    two_way_conversation 60 'C' 'H'
 }
 
-#doc_TEMP="TEMP"
-#setup_TEMP(){
-#   
-#}
-#test_TEMP(){
-
-#}
+doc_SplitRFD900="SplitRFD900"
+setup_SplitRFD900(){
+   setupN "+A +B +C +D +E" "rfd900,rfd900,rfd900,rfd900,rfd900" "allow between 0,1; allow between 0,2; allow between 0,3; allow between 1,4; allow between 2,4; allow between 3,4; deny all;"
+   # A -> {B, C, D}
+   # E -> {B, C, D}
+   set_instance +A
+   rhizome_add_file file1 50
+}
+test_SplitRFD900(){
+   e_received_bundle(){
+      bundle_received_by $BID:$VERSION +E
+   }
+   wait_until --timeout=180 e_received_bundle
+}
 
 #doc_TEMP="TEMP"
 #setup_TEMP(){
