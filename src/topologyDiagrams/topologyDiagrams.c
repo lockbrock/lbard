@@ -21,13 +21,14 @@ int outputType = 0;
 int cleanOldFiles = 1;  // Remove all files that are used to build the output format by default
 int isEmulation = 0; // Controls if we use fakeradio or LBARD major events, set by detection of fakeradio
 char outputFolder[150] = "";
+char inputFilename[150];
+char outputFilename[150] = "";
 struct TestDetails testDetails;
+
+int numBIDs = 0;
 
 int main(int argc, char **argv){
     // =============== Process arguments
-    char inputFilename[150];
-    char outputFilename[150] = "";
-
     if (argc < 3){
         fprintf(stderr, "Invalid number of arguments.\n");
         usage();
@@ -61,6 +62,11 @@ int main(int argc, char **argv){
     }
 
     strcpy(inputFilename, argv[1]);
+
+    int endOutputFolder = strlen(outputFolder);
+    if (outputFolder[endOutputFolder] == '/'){
+        outputFolder[endOutputFolder] = '\0';
+    }
     strcpy(outputFolder, argv[2]);
     sprintf(outputFilename, "%s/simpleLog.txt", outputFolder);    
 
@@ -85,8 +91,54 @@ int main(int argc, char **argv){
         fprintf(stdout, "Creating a simple log file and dot files\n\n");
     }
 
+    // =============== Create simple log
+    createSimpleLog();
+
+    // =============== Call appropriate post-simple log functions
+    if (outputType >= OUT_ASCII){
+        printf("Finished reading input file\n");
+        sortEvents();
+
+        if (outputType >= OUT_DOT){
+            createDotFile();
+            if (outputType >= OUT_PDF){
+                 if (outputType >= OUT_PDF){
+                     renderLATEXFile();
+                }
+            }
+        }else if (outputType >= OUT_ASCII){
+            printASCII();
+        }
+
+    }else{
+        printf("Finished creating simple log.\n");
+    }
+
+    return 0;
+}
+/**
+ *  Provides an error message and exits the program.
+ *  Called when malformed arguments are passed to the program
+ */
+void usage(){
+    char *msg = "\n\
+Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|createPDF] [noclean]\n\n\
+    input file:     path to the log file to be simplified \n\
+    output folder:  the folder where all outputs will be saved.\n\n\
+    ascii:          optional: create a pipeable ASCII representation of the traffic\n\
+    asciiMajor:     optional: create a pipeable ASCII representation of the traffic but only\n\
+                    outputting the major events\n\
+    dot:            optional: specifies if dot files are to be made\n\
+    images:         optional: specifies if images are to be made\n\
+    tex:            optional: creates an output LaTex file but does NOT render it and never deletes images\n\
+    pdf:            optional: specifies if a PDF is to be made\n\n\
+    noclean:        optional: don't delete files. ie. if rendering images\n\
+                    then don't delete the DOT files";
+    fprintf(stderr, "%s\n", msg);
+}
+
+void createSimpleLog(){
     setProcess("NONE");
-    // TODO: Move this to a new function
 
     // =============== Process input log file
     int bufferLength = 500;
@@ -159,39 +211,10 @@ int main(int argc, char **argv){
     }
     fclose(fptr);
     fclose(outputFile);
-    // Sort the file in-place
     char sortCommand[500] = "";
     // Sort the file in-place, AND make sure the output is unique
     sprintf(sortCommand, "sort %s -u -o %s", outputFilename, outputFilename);
     system(sortCommand);
-
-
-    if (outputType >= OUT_ASCII){
-        printf("Finished reading input file\n");
-        createDotFile();
-    }
-
-    return 0;
-}
-/**
- *  Provides an error message and exits the program.
- *  Called when malformed arguments are passed to the program
- */
-void usage(){
-    char *msg = "\n\
-Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|createPDF] [noclean]\n\n\
-    input file:     path to the log file to be simplified \n\
-    output folder:  the folder where all outputs will be saved.\n\n\
-    ascii:          optional: create a pipeable ASCII representation of the traffic\n\
-    asciiMajor:     optional: create a pipeable ASCII representation of the traffic but only\n\
-                    outputting the major events\n\
-    dot:            optional: specifies if dot files are to be made\n\
-    images:         optional: specifies if images are to be made\n\
-    tex:            optional: creates an output LaTex file but does NOT render it and never deletes images\n\
-    pdf:            optional: specifies if a PDF is to be made\n\n\
-    noclean:        optional: don't delete files. ie. if rendering images\n\
-                    then don't delete the DOT files";
-    fprintf(stderr, "%s\n", msg);
 }
 
 /**
@@ -203,6 +226,7 @@ Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|cre
 void createDotFile(){
     char startBuffer[1000] = "";
 
+    // ================================ Check for requirements
     if (outputType >= OUT_IMAGES){
         if (system("neato -V &> /dev/null") != 0){
             printf("\nError:    neato does not appear to be installed.\n          The program can not render .DOT files without this.\n");
@@ -215,73 +239,6 @@ void createDotFile(){
             }
         }
     }
-    // ============================== SORT EVENTS
-    // Current event index /should/ be at the end
-    listEventsLength = currentEventIndex;
-    // Sort the major event array
-    qsort(listEvents, listEventsLength, sizeof(struct Events), eventSort);
-
-    listEventsLength = currentEventIndex;
-    qsort(globalMinorEventArray, numGlobalMinorEvents, sizeof(struct MinorEvents), minorEventSort);
-
-    int minorEventIndex = 0;
-    // All of this is just linking the (now sorted) minor events
-    // to the relevant major event
-    for (int i = 0; i < listEventsLength; i++){
-        struct Events ev = listEvents[i];
-        char tmpTimeMajor[20] = "";
-        strcpy(tmpTimeMajor, ev.majorTime);
-        long timeStampMajor = timestampToLong(tmpTimeMajor);
-
-        int majorBeforeMinor = 1;
-        while(majorBeforeMinor && (minorEventIndex < numGlobalMinorEvents)){
-            // TODO: Add a max number of events before moving to a NEW/next major event
-            struct MinorEvents minorEvent = globalMinorEventArray[minorEventIndex];
-
-            // Strtok changes the variables passed. So just copy the content to a new var
-            // Seems a little hacky but it works?
-            char tmpTimeMinor[20] = "";
-            strcpy(tmpTimeMinor, minorEvent.majorTime);
-            long timeStampMinor = timestampToLong(tmpTimeMinor);
-
-            if (timeStampMinor > timeStampMajor){
-                majorBeforeMinor = 0;
-                //printf("moving to next major\n");
-            }else{
-                strcpy(ev.minorEventList[ev.numMinorEvents].majorTime, minorEvent.majorTime);
-                strcpy(ev.minorEventList[ev.numMinorEvents].message, minorEvent.message);
-                //printf("%s | %s\n", ev.minorEventList[ev.numMinorEvents].majorTime, ev.minorEventList[ev.numMinorEvents].message);
-                ev.numMinorEvents += 1;
-                minorEventIndex++;
-            }
-        }
-        // Now replace it back in the array
-        listEvents[i] = ev;
-    }
-
-    if (outputType == OUT_ASCII || outputType == OUT_ASCII_MAJOR){
-        for(int i = 0; i < listEventsLength; i++){
-            struct Events ev = listEvents[i];
-            // If broadcast, do something different
-            if(ev.eventType == 'S'){
-                printf("\n%d: [ %s] %s\n     %c -> BROADCAST\n", (i+1), ev.majorTime, ev.transferDetails, 
-                ev.sendingNode);
-            }else{
-                printf("\n%d: [ %s] %s\n     %c -> %c\n", (i+1), ev.majorTime, ev.transferDetails, 
-                ev.sendingNode, ev.destinationNode);
-            }
-            if (outputType == OUT_ASCII){
-                // Print minor events only if not requested for major events only
-                for(int j = 0; j< ev.numMinorEvents; j++){
-                    struct MinorEvents minor = ev.minorEventList[j];
-                    printf("- %s : %s\n", minor.majorTime, minor.message); 
-                }
-            }
-
-        }
-        return;
-    }
-
     // =============================== CREATE DOT FILE
     // I'm keeping it all nicely formatted when it's produced so this bit is a little ugly
     const char *startText =  "\
@@ -350,7 +307,7 @@ strict digraph A {\n\
                 sprintf(transferBuffer, "\
     subgraph Transfer {\n\
       edge [penwidth=3, len=1, style=bold]\n\
-      %c -> %c [color=\"blue\"]\n\
+      %c -> %s [color=\"blue\"]\n\
     }\n", ev.sendingNode, ev.destinationNode, ev.transferDetails);                
             
             }else if (ev.eventType == 'F'){
@@ -358,7 +315,7 @@ strict digraph A {\n\
                 sprintf(transferBuffer, "\
     subgraph Transfer {\n\
       edge [penwidth=3]\n\
-      %c -> %c [color=red]\n\
+      %c -> %s [color=red]\n\
     }\n", ev.sendingNode, ev.destinationNode, ev.transferDetails);
 
             }else if (ev.eventType == 'S'){
@@ -372,7 +329,7 @@ strict digraph A {\n\
                 
                 sprintf(transferBuffer, "\
     subgraph Transfer {\n\
-      edge [penwidth=3]\n", ev.sendingNode, ev.destinationNode, ev.transferDetails);
+      edge [penwidth=3]\n");
 
                 for(int i = 0; i < numFakeradioLinks; i ++){
                     if (allFakeradioLinks[i].node1 == ev.sendingNode){
@@ -383,7 +340,6 @@ strict digraph A {\n\
                         numNeighbours += 1;
                     }
                 }
-                //printf("\nNode %c has (%d) neighbour(s): %s\n", ev.sendingNode, numNeighbours,lbardNeighbours);
                 // Now, for each neighbour add a link
                 for (int i = 0; i < numNeighbours; i++){
                     char msg[48] = "";
@@ -410,9 +366,9 @@ strict digraph A {\n\
                         sprintf(msg, "      %c -> %c [color=red]\n", allFakeradioLinks[i].node1, allFakeradioLinks[i].node2);
                         sprintf(endBuffer, "%s%s", endBuffer, msg);
                     }
-
-                } else if (!(((allFakeradioLinks[i].node1 == ev.sendingNode) && (allFakeradioLinks[i].node2 == ev.destinationNode)) ||
-                             ((allFakeradioLinks[i].node2 == ev.sendingNode) && (allFakeradioLinks[i].node1 == ev.destinationNode)))){
+                // TODO: Fix this, doesn't work for multiple nodes
+                } else if (!(((allFakeradioLinks[i].node1 == ev.sendingNode) && (allFakeradioLinks[i].node2 == ev.destinationNode[0])) ||
+                             ((allFakeradioLinks[i].node2 == ev.sendingNode) && (allFakeradioLinks[i].node1 == ev.destinationNode[0])))){
                         char msg[48] = "";
                         sprintf(msg, "      %c -> %c [color=red]\n", allFakeradioLinks[i].node1, allFakeradioLinks[i].node2);
                         sprintf(endBuffer, "%s%s", endBuffer, msg);
@@ -441,7 +397,8 @@ strict digraph A {\n\
                         for (int j = i +1; j < strlen(listNodes); j++){
                             char charB = listNodes[j];
                             // This just checks that we're not re-printing the same link. Otherwise, we'd have double links when there is a transfer AND a FR/Wifi link
-                            if (!(((charA == ev.sendingNode) && (charB == ev.destinationNode)) || ((charB == ev.sendingNode) && (charA == ev.destinationNode)))){
+                            // TODO: Fix for multiple destinations
+                            if (!(((charA == ev.sendingNode) && (charB == ev.destinationNode[0])) || ((charB == ev.sendingNode) && (charA == ev.destinationNode[0])))){
                                 char msg[48] = "";
                                 sprintf(msg, "      %c -> %c [color=blue]\n", charA, charB);
                                 sprintf(endBuffer, "%s%s", endBuffer, msg);
@@ -503,32 +460,158 @@ strict digraph A {\n\
     }
     // New line since we were doing our progress bar on just the one line
     printf("\n");
-
-
-    if (outputType >= OUT_PDF){
-        // Render latex file here
-        char renderPDF[200];
-        printf("Rendering LaTeX PDF\n");
-        sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex &>/dev/null", outputFolder, outputFolder);
-        system(renderPDF);
-        printf("Finished rendering LaTeX PDF\n");
-
-        // Do NOT clean images if just creating a TeX file, as then it can't compile
-        if(cleanOldFiles){
-            // Remove all excess images after rendering
-            char imageFilename[250] = "";
-            for (int i = 0; i <= listEventsLength; i++){
-                sprintf(imageFilename, "%soutput%03d.png", outputFolder, i);
-                remove(imageFilename);
-            }
-            char cleanLatex[200] = "";
-            sprintf(cleanLatex, "rm  %sdiagrams.tex %sdiagrams.aux %sdiagrams.log", outputFolder, outputFolder, outputFolder);
-            system(cleanLatex);
-        } 
-    }
-    
 }
 
+void sortEvents(){
+    // Current event index /should/ be at the end
+    listEventsLength = currentEventIndex;
+    // Sort the major event array
+    qsort(listEvents, listEventsLength, sizeof(struct Events), eventSort);
+
+    listEventsLength = currentEventIndex;
+    qsort(globalMinorEventArray, numGlobalMinorEvents, sizeof(struct MinorEvents), minorEventSort);
+
+    int minorEventIndex = 0;
+    // All of this is just linking the (now sorted) minor events
+    // to the relevant major event
+    for (int i = 0; i < listEventsLength; i++){
+        struct Events ev = listEvents[i];
+        char tmpTimeMajor[20] = "";
+        strcpy(tmpTimeMajor, ev.majorTime);
+        long timeStampMajor = timestampToLong(tmpTimeMajor);
+
+        int majorBeforeMinor = 1;
+        while(majorBeforeMinor && (minorEventIndex < numGlobalMinorEvents)){
+            // TODO: Add a max number of events before moving to a NEW/next major event
+            struct MinorEvents minorEvent = globalMinorEventArray[minorEventIndex];
+
+            // Strtok changes the variables passed. So just copy the content to a new var
+            // Seems a little hacky but it works?
+            char tmpTimeMinor[20] = "";
+            strcpy(tmpTimeMinor, minorEvent.majorTime);
+            long timeStampMinor = timestampToLong(tmpTimeMinor);
+
+            if (timeStampMinor > timeStampMajor){
+                majorBeforeMinor = 0;
+                //printf("moving to next major\n");
+            }else{
+                strcpy(ev.minorEventList[ev.numMinorEvents].majorTime, minorEvent.majorTime);
+                strcpy(ev.minorEventList[ev.numMinorEvents].message, minorEvent.message);
+                //printf("%s | %s\n", ev.minorEventList[ev.numMinorEvents].majorTime, ev.minorEventList[ev.numMinorEvents].message);
+                ev.numMinorEvents += 1;
+                minorEventIndex++;
+            }
+        }
+        // Now replace it back in the array
+        listEvents[i] = ev;
+    }
+}
+
+void printASCII(){
+    for(int i = 0; i < listEventsLength; i++){
+        struct Events ev = listEvents[i];
+        // If broadcast, do something different
+        if(ev.eventType == 'S'){
+            printf("\n%d: [ %s] %s\n     %c -> BROADCAST\n", (i+1), ev.majorTime, ev.transferDetails, 
+            ev.sendingNode);
+        }
+        else if (ev.hasBitmap > 0){
+            printf("\n%d: [ %s] %s\n     %c -> %s\n", (i+1), ev.majorTime, ev.transferDetails, 
+            ev.sendingNode, ev.destinationNode);
+            
+            // Get the current node and bundle stuff
+            int bidNum = getBIDNumber(ev.bitmapBID);
+
+            for(int j = 0; j < ev.numDestinations; j++){
+                struct Bundle bd = nodeBundles[j][bidNum];
+                // Sort the body and manifest arrays
+                qsort(bd.bodyBytes, bd.numBody, sizeof(int), intComparator);
+                qsort(bd.manifestBytes, bd.numManifest, sizeof(int), intComparator);
+                // printf("sorted manifest bytes: ");
+                // for(int k=0; k<bd.numManifest; k++){
+                //     printf("%d, ",bd.manifestBytes[k]);
+                // }
+                // printf("\n");
+
+                if (ev.hasBitmap == 1){
+                    // Manifest
+                    int index = -1;
+                    for(int k = 0; k < bd.numManifest; k++){
+                        if (bd.manifestBytes[k] == ev.bitmapStartBytes){
+                            index = k;
+                            break;
+                        }
+                    }
+                    if (index >= 0){
+                        while (bd.manifestBytes[index] != ev.bitmapEndBytes){
+                            bd.countManifestBytes[index] += 1;
+                            index++;
+                        }
+                    }
+                }else if (ev.hasBitmap == 2){
+                    // Body
+                    int index = -1;
+                    for(int k = 0; k < bd.numBody; k++){
+                        if (bd.bodyBytes[k] == ev.bitmapStartBytes){
+                            index = k;
+                            break;
+                        }
+                    }
+                    if (index >= 0){
+                        while (bd.bodyBytes[index] != ev.bitmapEndBytes){
+                            bd.countBodyBytes[index] += 1;
+                            index++;
+                        }
+                    }
+                }else{
+                    printf("invalid bitmap value\n");
+                }
+                nodeBundles[j][bidNum] = bd;
+
+                // =========== Printing body bitmap headers and counts
+                printf("\tManifest Bitmap (%c):\n\t|", ev.destinationNode[j]);
+                // Print header
+                for(int k = 0; k < bd.numManifest -1; k++){
+                    char tmpMsg[20] = "";
+                    sprintf(tmpMsg, "[%d,%d)", bd.manifestBytes[k], bd.manifestBytes[k+1]);
+                    printf(" %-11s|", tmpMsg);
+                }
+                printf("\n\t|");
+                // Print bitmap counts
+                for(int k = 0; k < bd.numManifest -1; k++){
+                    printf(" %-11d|", bd.countManifestBytes[k]);
+                }
+                // =========== Printing Manifest bitmap headers and counts
+                printf("\n\n\tBody Bitmap (%c):\n\t|", ev.destinationNode[j]);
+                for(int k = 0; k < bd.numBody -1; k++){
+                    char tmpMsg[20] = "";
+                    sprintf(tmpMsg, "[%d,%d)", bd.bodyBytes[k], bd.bodyBytes[k+1]);
+                    printf(" %-11s|", tmpMsg);
+                }
+                printf("\n\t|");
+                // Print bitmap counts
+                for(int j = 0; j < bd.numBody -1; j++){
+                    printf(" %-11d|", bd.countBodyBytes[j]);
+                }
+
+                printf("\n");
+            }                
+        }else{
+            printf("\n%d: [ %s] %s\n     %c -> %s\n", (i+1), ev.majorTime, ev.transferDetails, 
+            ev.sendingNode, ev.destinationNode);
+        }
+        if (outputType == OUT_ASCII){
+            // Print minor events only if not requested for major events only
+            for(int j = 0; j< ev.numMinorEvents; j++){
+                struct MinorEvents minor = ev.minorEventList[j];
+                printf("- %s : %s\n", minor.majorTime, minor.message); 
+            }
+        }
+
+    }
+    // Exit out of this now
+    return;
+}
 /**
  *  Write the LaTeX file for each of the events.
  *  Creates one portrait A4 page per event. 
@@ -618,6 +701,27 @@ void createLATEXFile(const struct Events ev, const char *outputImageName, const 
     }
 }
 
+void renderLATEXFile(){
+    // Render latex file here
+    char renderPDF[200];
+    printf("Rendering LaTeX PDF\n");
+    sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex &>/dev/null", outputFolder, outputFolder);
+    system(renderPDF);
+    printf("Finished rendering LaTeX PDF\n");
+
+    // Do NOT clean images if just creating a TeX file, as then it can't compile
+    if(cleanOldFiles){
+        // Remove all excess images after rendering
+        char imageFilename[250] = "";
+        for (int i = 0; i <= listEventsLength; i++){
+            sprintf(imageFilename, "%soutput%03d.png", outputFolder, i);
+            remove(imageFilename);
+        }
+        char cleanLatex[200] = "";
+        sprintf(cleanLatex, "rm  %sdiagrams.tex %sdiagrams.aux %sdiagrams.log", outputFolder, outputFolder, outputFolder);
+        system(cleanLatex);
+    }
+}
 /**
  *  Set the process variable. Do it in this function so that we can do 
  *  specific things on certain process changes (ie. begin/end setup)
@@ -823,6 +927,9 @@ int isLineRelevant(char line[]){
         if (strstr(line, "is missing bundle")){
             return LBARD_SYNC_MESSAGE;
         }
+        if (strstr(line, "Saw a piece of BID=")){
+            return LBARD_RECEIVE_PACKET;
+        }
     }
     
     if (strcmp(process, "FAKERADIO") == 0){
@@ -877,7 +984,6 @@ void writeRhizomeSendPacket(char line[]){
         // broadcast ones are to anyone on the network, not super relevant. We're kinda just ignoring it
         // TODO: Add this to a broadcast WIFI event later
         if(outputType >= OUT_ASCII){
-            // TODO: Shorten the SIDs to 8 chars and then (Node A)
             char tempMsg[300] = "";
             //DEBUG:[584836] 15:23:17.870 overlay_mdp.c:817:_overlay_send_frame()  {mdprequests} Attempting to queue mdp packet from 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052:18 to 2BEF74429C78AEB1347B6182E8689F9B9644EDF74379D7C0635F5649D85A2F39:18
             //printf("test %s\n", line);
@@ -903,8 +1009,13 @@ void writeRhizomeSendPacket(char line[]){
             //[SEND_MANIFEST] Send frame 464 bytes to 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052
             char sidChar = getNodeFromSid(rhizomeDestination);
             struct Events currentEvent;
-            currentEvent.destinationNode = sidChar;
+            char msgDestinations[26] = "";
+            msgDestinations[0] = sidChar;
+            // Just one destination, so only add one
+            currentEvent.numDestinations = 1;
+            strcpy(currentEvent.destinationNode, msgDestinations);
             currentEvent.sendingNode = instanceChar;
+            currentEvent.hasBitmap = 0;
             currentEvent.eventType = 'W';
             sprintf(dotMsg, "[%s] [%s bytes]", frameMessage, numBytes);
             strcpy(currentEvent.transferDetails, dotMsg);
@@ -1058,10 +1169,6 @@ void writeNodeInfo(char line[]){
         //printf("line: %s", line);
         sscanf(line, "%s %[^=]=%s", &tmp, &instance, &sid);
         if (strlen(instance) == 4){
-            // TODO: Make work smarter and use the instance as a number
-            //      this means that we can re-assign instead of just appending
-            //      important for when we have real world devices which don't have setup
-            // Add it to the array so we can compare things to it later
             int instNum = instance[3] - 65;
             strcpy(sidArray[instNum], sid);
             numSidArray = instNum;
@@ -1123,15 +1230,16 @@ void writeLBARDBundle(char line[]){
     if (strstr(line, "We have new bundle")){
         // We have new bundle EB7E8ABC39C548D939C5AB1E0015B7D5389D7C3FFBD1BE44439DC7C0A5F6730C/1596604638358
         sscanf(details, "We have new bundle %[^/]", &longBID);
+        registerBundle(longBID);
         char shortBID[10] = "";
         shortenBID(longBID, shortBID);
-        sprintf(details, "We have new bundle %s", shortBID);
+        sprintf(details, "We have new bundle %s*", shortBID);
     }else if (strstr(line, "We have the entire bundle")){
         // We have the entire bundle eb7e8abc39c548d9*/1596604638358 now.
         sscanf(details, "We have the entire bundle %[^/]", &longBID);
         char shortBID[10] = "";
         shortenBID(longBID, shortBID);
-        sprintf(details, "We have the entire bundle %s", shortBID);
+        sprintf(details, "We have the entire bundle %s*", shortBID);
     }else if (strstr(line, "HAS some bundle")){
         // Peer be69b56b901e* HAS some bundle that we don't have (key prefix=484C*).
         char longSID[66] = "";
@@ -1160,8 +1268,22 @@ void writeLBARDBundle(char line[]){
         sscanf(details, "Progress receiving BID=%s version %s manifest is %s bytes long %[^,] , and body %s",
             &tmpBID, &tmpVersion, &manifestLength, &tmp, &bodyLength);
         shortenBID(tmpBID, shortBID);
-        sprintf(details, "Progress receiving %s: Manifest is %s bytes, and body is %s bytes", shortBID, manifestLength, bodyLength);
-        // TODO: Shorten BID
+        sprintf(details, "Progress receiving %s*: Manifest is %s bytes, and body is %s bytes", shortBID, manifestLength, bodyLength);
+    }else if (strstr(line, "I just sent")){
+        char msgDestSID[66] = "";
+        char msgType[50] = "";
+        char msgBidLong[65] = "";
+        char msgShortBid[16] = "";
+        char msgByteVals[20] = "";
+        int startBytes = -1;
+        int endBytes = -1;
+
+        sscanf(details, "I just sent %s piece %s of %s for %s %[^\n\t]",
+                &msgType, &msgByteVals, &msgBidLong, &msgDestSID, &tmp);
+        sscanf(msgByteVals, "[%d,%d)", &startBytes, &endBytes);
+        shortenBID(msgBidLong, msgShortBid);
+        sprintf(details, "Sent %s piece [%d,%d) of %s*", msgType, startBytes, endBytes, msgShortBid);
+
     }
     sprintf(msg, "%s LBARD:%c %s\n", timeStamp, instanceChar, details);
     writeLineToLog(msg);
@@ -1173,36 +1295,47 @@ void writeLBARDBundle(char line[]){
             addToMinorEvents(msg);
         }else if (strstr(line, "HAS some bundle")){
             addToMinorEvents(msg);
-        }else if (strstr(msg, "I just sent")){
+        }else if (strstr(line, "I just sent")){
             // ADD TO MAJOR EVENTS
-            //16:48:23.416396 LBARD:A I just sent manifest piece [0,128) of DEF9953BA06F72F1E5B15207AFB3F9D62D4A64D073BBEE12C3A84F0FAA22F713* for cee162c5a2a6* (filling 149 of the 192 remaining packet bytes).
-            //19:37:27.796695 LBARD:B I just sent body piece [320,384) of 3AC0A0F66043D55EEB595FD42A8E4559F3888A06918F829942F393BBD3ADB301* for af61752c0382* (filling 85 of the 140 remaining packet bytes).
-            char msgDest = '-';
+            // Sent manifest piece [256,258) of 5B59E446*
             char msgDestSID[66] = "";
             char msgSend = '-';
             char msgDot[256] = "";
             char msgType[50] = "";
             char msgBidLong[65] = "";
             char msgShortBid[16] = "";
-            // TODO: Do something more with these byte values
-            sscanf(msg, "%s LBARD:%c I just sent %s piece %s of %s for %s %[^\n\t]",
-                    &timeStamp, &msgSend, &msgType, &tmp, &msgBidLong, &msgDestSID, &tmp);
-            msgDest = getNodeFromSid(msgDestSID);
+            char msgByteVals[20] = "";
+            sscanf(msg, "%s LBARD:%c Sent %s piece %s of %s for %s %[^\n\t]",
+                    &timeStamp, &msgSend, &msgType, &msgByteVals, &msgBidLong, &msgDestSID, &tmp);
+            // msgDest = getNodeFromSid(msgDestSID);
+            registerBundle(msgBidLong);
 
-            if (msgDest == '-'){
-                // Sometimes lines get all kinds of mangled from memory issues in LBARD
-                // These /tend/ to occur later in the message so the SID gets mangled
-                // Simply put, there's nothing we can do about it so just dump them.
-                printf("Error processing line: %s", msg);
-                return;
-            }
+            // if (msgDest == '-'){
+            //     // Sometimes lines get all kinds of mangled from memory issues in LBARD
+            //     // These /tend/ to occur later in the message so the SID gets mangled
+            //     // Simply put, there's nothing we can do about it so just dump them.
+            //     printf("Error processing line: %s", msg);
+            //     return;
+            // }
             struct Events currentEvent;
-            currentEvent.destinationNode = msgDest;
             currentEvent.sendingNode = msgSend;
             currentEvent.eventType = 'F';
+            currentEvent.hasBitmap = 0;
+            strcpy(currentEvent.bitmapBID, longBID);
+
+            int startBytes = -1;
+            int endBytes = -1;
+            sscanf(msgByteVals, "[%d,%d)", &startBytes, &endBytes);
+
+            // Add the bytes to the overall bundle info
+            // This allows us to have an breakdown of what pieces the node has
+            //int destNodeInt = msgDest - 65;
+            currentEvent = calculateBitmapPartitions(msgType, msgSend, startBytes, endBytes, currentEvent);
+
+
             strcpy(currentEvent.majorTime, timeStamp);
             shortenBID(msgBidLong, msgShortBid);
-            sprintf(msgDot, "Sent %s piece of %s", msgType, msgShortBid);
+            sprintf(msgDot, "Sent %s piece [%d,%d) of %s*", msgType, startBytes, endBytes, msgShortBid);
             strcpy(currentEvent.transferDetails, msgDot);
             // printf("[%s] %c -> %c | %s\n", timeStamp, msgSend, msgDest, currentEvent.transferDetails);
             currentEvent.numMinorEvents = 0;
@@ -1210,7 +1343,6 @@ void writeLBARDBundle(char line[]){
             currentEventIndex += 1;
             addToMinorEvents(msg);
         }else{
-            // printf("default: %s", msg);
             addToMinorEvents(msg);
         }
     }
@@ -1239,7 +1371,7 @@ void writeLBARDSend(char line[]){
         sscanf(details, "%s %s %s %s %s %[^\n\t]", &tmp, &tmp, &tmp, &tmp, &longBID, &details);
         char shortBID[10] = "";
         shortenBID(longBID, shortBID);
-        sprintf(details, "Sending length of bundle %s %s", shortBID, tmpDetails);
+        sprintf(details, "Sending length of bundle %s* %s", shortBID, tmpDetails);
     }else if (strstr(line, "Resending bundle")){
         // Also format so BID is 8 chars (diff. format)
         // Resending bundle EB7E8ABC39C548D939C5AB1E0015B7D5389D7C3FFBD1BE44439DC7C0A5F6730C from the start.
@@ -1247,7 +1379,7 @@ void writeLBARDSend(char line[]){
         sscanf(details, "%s %s %s", &tmp, &tmp, &longBID);
         char shortBID[10] = "";
         shortenBID(longBID, shortBID);
-        sprintf(details, "Resending bundle %s from the start.", shortBID);
+        sprintf(details, "Resending bundle %s* from the start.", shortBID);
     }else if (strstr(details, "has finished receiving")){
         // SYNC FIN: 49eb1e150256* has finished receiving 5F89FBA833864024 version 1600145057775 (bundle #0)
         char longSID[65] = "";
@@ -1301,10 +1433,22 @@ void writeLBARDSync(char line[]){
             char msgDot[500] = "";
             sprintf(msgDot, "Tree sync message");
 
-            char msgDest = '-';
+            char nodeNeighbours[25] = "";
+            int numNodeNeighbours = 0;
+            for (int i = 0; i < numFakeradioLinks; i++){
+                if (allFakeradioLinks[i].node1 == instanceChar){
+                    nodeNeighbours[numNodeNeighbours] = allFakeradioLinks[i].node2;
+                    numNodeNeighbours++;
+                }else if (allFakeradioLinks[i].node2 == instanceChar){
+                    nodeNeighbours[numNodeNeighbours] = allFakeradioLinks[i].node1;
+                    numNodeNeighbours++;
+                }
+            }
             struct Events currentEvent;
-            currentEvent.destinationNode = msgDest;
+            strcpy(currentEvent.destinationNode, nodeNeighbours);
+            currentEvent.numDestinations = numNodeNeighbours;
             currentEvent.sendingNode = instanceChar;
+            currentEvent.hasBitmap = 0;
             currentEvent.eventType = 'S';
             strcpy(currentEvent.majorTime, timeStamp);
             strcpy(currentEvent.transferDetails, msgDot);
@@ -1327,7 +1471,7 @@ void writeLBARDSync(char line[]){
             shortenBID(longBID, shortBID);
             shortenSID(sid, shortSID);
             nodeChar = getNodeFromSid(shortSID);
-            sprintf(msg, "%s LBARD:%c Neighbour Node %c (%s) now has bundle %s", timeStamp, instanceChar, nodeChar, shortSID, shortBID);
+            sprintf(msg, "%s LBARD:%c Neighbour Node %c (%s) now has bundle %s*\n", timeStamp, instanceChar, nodeChar, shortSID, shortBID);
             // Neighbour Node C (SID) now has bundle BID
 
         }else if(strstr(line, "is missing bundle")){
@@ -1341,7 +1485,7 @@ void writeLBARDSync(char line[]){
             shortenBID(longBID, shortBID);
             shortenSID(longSID, shortSID);
             char nodeChar = getNodeFromSid(shortSID);
-            sprintf(msg, "%s LBARD:%c Neighbour Node %c (%s) is missing bundle %s", timeStamp, instanceChar, nodeChar, shortSID, shortBID);
+            sprintf(msg, "%s LBARD:%c Neighbour Node %c (%s) is missing bundle %s*\n", timeStamp, instanceChar, nodeChar, shortSID, shortBID);
         }
         if (outputType >= OUT_ASCII){
             addToMinorEvents(msg);
@@ -1431,11 +1575,11 @@ void writeFakeradioBundle(char line[]){
                     shortenBID(bundleID, shortBID);
 
                     if (strcmp(startBytes, "")){
-                        sprintf(msg, "%sFAKERADIO %c -> %c [partial bundle]  bid=%s [%s to %s. Total: %s bytes]\n", timeStamp, sendNode, destNode, bundleID, startBytes, endBytes, byteLength);
+                        sprintf(msg, "%sFAKERADIO %c -> %c [partial bundle]  bid=%s* [%s to %s. Total: %s bytes]\n", timeStamp, sendNode, destNode, bundleID, startBytes, endBytes, byteLength);
                         // // The transfer message that will be displayed in the DOT file
                         // sprintf(msgDot, "[partial bundle]  bid=%s [%s to %s. Length: %s bytes]", shortBID, startBytes, endBytes, byteLength);
                     }else{
-                        sprintf(msg, "%sFAKERADIO %c -> %c [bundle piece]  bid=%s [%s bytes]\n", timeStamp, sendNode, destNode, bundleID, byteLength);
+                        sprintf(msg, "%sFAKERADIO %c -> %c [bundle piece]  bid=%s* [%s bytes]\n", timeStamp, sendNode, destNode, bundleID, byteLength);
                         // // The transfer message that will be displayed in the DOT file
                         // sprintf(msgDot, "[bundle piece] bid=%s [%s bytes]", shortBID, byteLength);
                     }
@@ -1448,8 +1592,13 @@ void writeFakeradioBundle(char line[]){
                 if(outputType >= OUT_ASCII){
                     if (strlen(msgDot) > 0){
                         struct Events currentEvent;
-                        currentEvent.destinationNode = destNode;
+                        char msgDestinations[26] = "";
+                        msgDestinations[0] = destNode;
+                        // Just one destination, so only add one
+                        currentEvent.numDestinations = 1;
+                        strcpy(currentEvent.destinationNode, msgDestinations);
                         currentEvent.sendingNode = sendNode;
+                        currentEvent.hasBitmap = 0;
                         currentEvent.eventType = 'F';
                         currentEvent.numMinorEvents = 0;
                         strcpy(currentEvent.majorTime, timeStamp);
@@ -1506,20 +1655,111 @@ void writeFakeradioBundle(char line[]){
                 //[ 3456..3582] [128 bytes]
 
                 sscanf(buffer, "%s %s [%[^.].%c %[^]] %c (%s", &tmp, &tmp, &startBytes, &tmpC, &endBytes, &tmpC, &sentBytes);
-                printf("Sent bytes: %s to %s | total: %s\n", startBytes, endBytes, sentBytes);
+                // printf("Sent bytes: %s to %s | total: %s\n", startBytes, endBytes, sentBytes);
             }
-
-
-            }
-            // Increment line by one
-            fgets(buffer, bufferLength, fptr);
-            maxLines += 1;
+        }
+        // Increment line by one
+        fgets(buffer, bufferLength, fptr);
+        maxLines += 1;
 
     }
     
     // Go back to our starting line - prevents accidentally missing lines from going too far 
     // (causes issues with LBARD which is right after in the log)
     fseek(fptr, startLine, SEEK_SET);
+}
+
+
+Events calculateBitmapPartitions(char msgType[50], char msgSend, int startBytes, int endBytes, Events ev){
+    // Get an array of the lbard neighbours of this node
+    // Iterate through this array and do this for each neighbour node
+    char nodeNeighbours[25] ="";
+    int numNodeNeighbours = 0;
+    for (int i = 0; i < numFakeradioLinks; i++){
+        if (allFakeradioLinks[i].node1 == msgSend){
+            nodeNeighbours[numNodeNeighbours] = allFakeradioLinks[i].node2;
+            numNodeNeighbours++;
+        }else if (allFakeradioLinks[i].node2 == msgSend){
+            nodeNeighbours[numNodeNeighbours] = allFakeradioLinks[i].node1;
+            numNodeNeighbours++;
+        }
+    }
+    for(int i = 0; i < numNodeNeighbours; i++){
+        int destNodeInt = nodeNeighbours[i] - 65;
+
+        if (strcmp(msgType, "manifest") == 0){
+            // Append to the array for this node
+            int bidNum = getBIDNumber(ev.bitmapBID);
+            struct Bundle nodeBundle = nodeBundles[destNodeInt][bidNum];
+            // printf("Node %c receiving [%d,%d)\nfor line: %s\n", nodeNeighbours[i], startBytes, endBytes, msg);
+            int startIsUnique = 1;
+            int endIsUnique = 1;
+            for(int j = 0; j < nodeBundle.numManifest; j++){
+                if (nodeBundle.manifestBytes[j] == startBytes){
+                    startIsUnique = 0;
+                }
+                if (nodeBundle.manifestBytes[j] == endBytes){
+                    endIsUnique = 0;
+                }
+            }
+
+            if (startIsUnique){
+                // printf("adding start bytes for node %c : %d\n", nodeNeighbours[i], startBytes);
+                nodeBundle.manifestBytes[nodeBundle.numManifest] = startBytes;
+                nodeBundle.numManifest += 1;
+            }
+            if (endIsUnique){
+                // printf("adding endbytes for node %c : %d\n", nodeNeighbours[i], endBytes);
+                nodeBundle.manifestBytes[nodeBundle.numManifest] = endBytes;
+                nodeBundle.numManifest += 1;
+                // printf("list for node %c is now: ", nodeNeighbours[i]);
+                // for(int sdsa = 0; sdsa < nodeBundle.numManifest; sdsa++){
+                    // printf("%d, ", nodeBundle.manifestBytes[sdsa]);
+                // }
+                // printf("\n\n");
+            }
+            nodeBundles[destNodeInt][bidNum] = nodeBundle;
+
+            // Now add this info to the current event bitmap stuff
+            ev.hasBitmap = 1;
+            ev.bitmapStartBytes = startBytes;
+            ev.bitmapEndBytes = endBytes;
+
+        }else if (strcmp(msgType, "body") == 0){
+            
+            // Append to the array for this node
+             int bidNum = getBIDNumber(ev.bitmapBID);
+            struct Bundle nodeBundle = nodeBundles[destNodeInt][bidNum];
+            int startIsUnique = 1;
+            int endIsUnique = 1;
+            for(int j = 0; j < nodeBundle.numBody; j++){
+                if (nodeBundle.bodyBytes[j] == startBytes){
+                    startIsUnique = 0; 
+                }
+                if (nodeBundle.bodyBytes[j] == endBytes){
+                    endIsUnique = 0;
+                }
+            }
+            if (startIsUnique){
+                nodeBundle.bodyBytes[nodeBundle.numBody] = startBytes;
+                nodeBundle.numBody += 1;
+            }
+            if (endIsUnique){
+                nodeBundle.bodyBytes[nodeBundle.numBody] = endBytes;
+                nodeBundle.numBody += 1;
+            }
+            nodeBundles[destNodeInt][bidNum] = nodeBundle;
+            ev.hasBitmap = 2;
+            ev.bitmapStartBytes = startBytes;
+            ev.bitmapEndBytes = endBytes;
+        }else{
+            printf("invalid: %s\n", msgType);
+            exit(-1);
+        }
+    }
+    ev.numDestinations = numNodeNeighbours;
+    strcpy(ev.destinationNode, nodeNeighbours);
+    return ev;
 }
 
 /**
@@ -1650,6 +1890,35 @@ char getNodeFromSid(char sid[]){
     return '-';
 }
 
+void registerBundle(char line[]){
+    if (strstr(line, "*")){
+        // Assume it's in the last place..
+        int index = strlen(line) -1;
+        line[index] = '\0';
+    }
+    char shortBID[20] = "";
+    shortenBID(line, shortBID);
+    for (int i = 0; i < numBIDs; i++){
+        if (strstr(listBids[i], shortBID)){
+            return;
+        }
+    }
+    strcpy(listBids[numBIDs], line);
+    numBIDs += 1;
+}
+
+int getBIDNumber(char bid[]){
+    char shortBID[20] = "";
+    for(int i = 0; i < numBIDs; i++){
+        shortenBID(bid, shortBID);
+        if (strstr(listBids[i], shortBID)){
+            return i;
+        }
+    }
+    printf("Could not find the bid number for %s\n", bid);
+    return -1;
+}
+
 /**
  *  Utility function. Allows us to easily add lines to the minor event list
  */
@@ -1667,7 +1936,7 @@ void addToMinorEvents(const char line[]){
 
 void shortenBID(const char longBID[], char shortBID[]){
     memcpy(shortBID, &longBID[0], 8);
-    shortBID[8] = '*';
+    //shortBID[8] = '*';
     shortBID[9] = '\0';
     // Make it uppercase
     for (int i = 0; i < 9; i++){
@@ -1729,6 +1998,10 @@ int minorEventSort(const void* a, const void* b){
         return 1;
     }
     return 0;  
+}
+
+int intComparator (const void * a, const void * b) {
+   return ( *(int*)a - *(int*)b );
 }
 
 /**
