@@ -105,6 +105,7 @@ FILE *latexFile;
 // ============= BUNDLE BITMAPS
 typedef struct Bundle{
     // These are /not/ the max byte sizes, but rather the max number of partitions
+    // This should handle files up to 6,400 bytes
     int manifestBytes[100];
     int bodyBytes[100];
 
@@ -161,6 +162,10 @@ void writeFakeradioBundle(char line[]);
 
 Events calculateBitmapPartitions(char msgType[], char msgSend, int startBytes, int endBytes, Events ev);
 
+Bundle calculateBitmapCounts(Events ev, Bundle bd);
+
+Bundle addBitmap64Multiples(Bundle bd, int byteArray[], int numPartitions, int bitmapType);
+
 char *longToTimestamp(long tmpLong);
 
 static char *convertLBARDTime(long initialTime, char *timeStamp);
@@ -173,7 +178,7 @@ char getNodeFromSid(char sid[]);
 
 void registerBundle(char line[]);
 
-int getBIDNumber(char bid[]);
+int getBIDNumber(const char bid[]);
 
 void addToMinorEvents(const char line[]);
 

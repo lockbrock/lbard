@@ -62,13 +62,15 @@ int main(int argc, char **argv){
     }
 
     strcpy(inputFilename, argv[1]);
+    strcpy(outputFolder, argv[2]);
 
     int endOutputFolder = strlen(outputFolder);
-    if (outputFolder[endOutputFolder] == '/'){
-        outputFolder[endOutputFolder] = '\0';
+
+    if (outputFolder[endOutputFolder-1] != '/'){
+        // Add a / if one is not trailing at the end of the output folder
+        sprintf(outputFolder, "%s/", outputFolder);
     }
-    strcpy(outputFolder, argv[2]);
-    sprintf(outputFilename, "%s/simpleLog.txt", outputFolder);    
+    sprintf(outputFilename, "%ssimpleLog.txt", outputFolder);    
 
 
     if ((fptr = fopen(inputFilename,"r")) == NULL){
@@ -254,7 +256,7 @@ strict digraph A {\n\
     sprintf(nodesBuffer, "\
     subgraph Nodes {\n\
       node [pin=true, shape=circle]\n");
-    for(int i = 0; i < numSidArray; i++){
+    for(int i = 0; i < numSidArray +1; i++){
         sprintf(nodesBuffer, "%s      %c\n", nodesBuffer, i+65);
     }
     const char *endNodes = "\
@@ -314,9 +316,14 @@ strict digraph A {\n\
             // Fakeradio/LBARD
                 sprintf(transferBuffer, "\
     subgraph Transfer {\n\
-      edge [penwidth=3]\n\
-      %c -> %s [color=red]\n\
-    }\n", ev.sendingNode, ev.destinationNode, ev.transferDetails);
+        edge [penwidth=3]\n");
+    
+                for(int i = 0; i < ev.numDestinations; i++){
+                    sprintf(transferBuffer, "%s\
+        %c -> %c [color=red]\n", transferBuffer, ev.sendingNode, ev.destinationNode[i], ev.transferDetails);    
+                }
+                sprintf(transferBuffer, "%s\t\t}\n", transferBuffer);
+                
 
             }else if (ev.eventType == 'S'){
                 // TODO: HANDLE THIS FOR LBARD (NO FAKERADIO)
@@ -508,10 +515,12 @@ void sortEvents(){
 }
 
 void printASCII(){
+    const int debugBitmapOnly = 0;
     for(int i = 0; i < listEventsLength; i++){
         struct Events ev = listEvents[i];
         // If broadcast, do something different
-        if(ev.eventType == 'S'){
+        
+        if(ev.eventType == 'S' && !debugBitmapOnly){
             printf("\n%d: [ %s] %s\n     %c -> BROADCAST\n", (i+1), ev.majorTime, ev.transferDetails, 
             ev.sendingNode);
         }
@@ -519,54 +528,18 @@ void printASCII(){
             printf("\n%d: [ %s] %s\n     %c -> %s\n", (i+1), ev.majorTime, ev.transferDetails, 
             ev.sendingNode, ev.destinationNode);
             
-            // Get the current node and bundle stuff
-            int bidNum = getBIDNumber(ev.bitmapBID);
 
             for(int j = 0; j < ev.numDestinations; j++){
-                struct Bundle bd = nodeBundles[j][bidNum];
-                // Sort the body and manifest arrays
-                qsort(bd.bodyBytes, bd.numBody, sizeof(int), intComparator);
-                qsort(bd.manifestBytes, bd.numManifest, sizeof(int), intComparator);
-                // printf("sorted manifest bytes: ");
-                // for(int k=0; k<bd.numManifest; k++){
-                //     printf("%d, ",bd.manifestBytes[k]);
-                // }
-                // printf("\n");
+                // struct Bundle bd = nodeBundles[j][bidNum];
 
-                if (ev.hasBitmap == 1){
-                    // Manifest
-                    int index = -1;
-                    for(int k = 0; k < bd.numManifest; k++){
-                        if (bd.manifestBytes[k] == ev.bitmapStartBytes){
-                            index = k;
-                            break;
-                        }
-                    }
-                    if (index >= 0){
-                        while (bd.manifestBytes[index] != ev.bitmapEndBytes){
-                            bd.countManifestBytes[index] += 1;
-                            index++;
-                        }
-                    }
-                }else if (ev.hasBitmap == 2){
-                    // Body
-                    int index = -1;
-                    for(int k = 0; k < bd.numBody; k++){
-                        if (bd.bodyBytes[k] == ev.bitmapStartBytes){
-                            index = k;
-                            break;
-                        }
-                    }
-                    if (index >= 0){
-                        while (bd.bodyBytes[index] != ev.bitmapEndBytes){
-                            bd.countBodyBytes[index] += 1;
-                            index++;
-                        }
-                    }
-                }else{
-                    printf("invalid bitmap value\n");
-                }
-                nodeBundles[j][bidNum] = bd;
+                char nodeChar = ev.destinationNode[j];
+                int nodeNum = nodeChar -64;
+
+                int bidNum = getBIDNumber(ev.bitmapBID);
+                struct Bundle bd = nodeBundles[nodeNum][bidNum];
+
+                bd = calculateBitmapCounts(ev, bd);
+                nodeBundles[nodeNum][bidNum] = bd;
 
                 // =========== Printing body bitmap headers and counts
                 printf("\tManifest Bitmap (%c):\n\t|", ev.destinationNode[j]);
@@ -582,7 +555,7 @@ void printASCII(){
                     printf(" %-11d|", bd.countManifestBytes[k]);
                 }
                 // =========== Printing Manifest bitmap headers and counts
-                printf("\n\n\tBody Bitmap (%c):\n\t|", ev.destinationNode[j]);
+                printf("\n\tBody Bitmap (%c):\n\t|", ev.destinationNode[j]);
                 for(int k = 0; k < bd.numBody -1; k++){
                     char tmpMsg[20] = "";
                     sprintf(tmpMsg, "[%d,%d)", bd.bodyBytes[k], bd.bodyBytes[k+1]);
@@ -594,9 +567,9 @@ void printASCII(){
                     printf(" %-11d|", bd.countBodyBytes[j]);
                 }
 
-                printf("\n");
+                printf("\n\n");
             }                
-        }else{
+        }else if (!debugBitmapOnly){
             printf("\n%d: [ %s] %s\n     %c -> %s\n", (i+1), ev.majorTime, ev.transferDetails, 
             ev.sendingNode, ev.destinationNode);
         }
@@ -607,7 +580,6 @@ void printASCII(){
                 printf("- %s : %s\n", minor.majorTime, minor.message); 
             }
         }
-
     }
     // Exit out of this now
     return;
@@ -677,10 +649,83 @@ void createLATEXFile(const struct Events ev, const char *outputImageName, const 
 \\begin{centering} \n\
     \\includegraphics[height=10cm, keepaspectratio]{%s}\\\\\n\
 \\end{centering}\n\
-\\raggedright\n\
-\\hrulefill \\linebreak\n\n", outputImageName);
+\\raggedright\n", outputImageName);
     fputs(imageText, latexFile);
 
+
+    // ============== Adding bundle bitmaps
+
+    if (ev.hasBitmap){
+        char *bitmapInit = "\
+\\begin{table}[h!]\n";
+        fputs(bitmapInit, latexFile);
+
+        for (int i = 0; i < ev.numDestinations; i++){
+            char bitmapTable[10000] = "";
+            char nodeChar = ev.destinationNode[i];
+            int nodeNum = nodeChar -64;
+
+            int bidNum = getBIDNumber(ev.bitmapBID);
+            struct Bundle nodeBundle = nodeBundles[nodeNum][bidNum];
+
+            nodeBundle = calculateBitmapCounts(ev, nodeBundle);
+            nodeBundles[nodeNum][bidNum] = nodeBundle;
+
+            sprintf(bitmapTable, "\n\
+    {\\large\n\
+    Node %c bitmap for %s*\\\\}\n", nodeChar, ev.bitmapBID);
+
+            // Body bitmap table headers
+            sprintf(bitmapTable, "%s\
+    \\begin{tabular}{|", bitmapTable);
+            for(int j = 0; j < nodeBundle.numBody; j++){
+                sprintf(bitmapTable, "%sl|", bitmapTable);
+            }
+            sprintf(bitmapTable, "%s}\n\
+        \\hline\n\
+        \\textbf{Body}\t", bitmapTable);
+
+            for (int j = 0; j < nodeBundle.numBody -1; j++){
+                sprintf(bitmapTable, "%s&\t\\textbf{%d, %d}", bitmapTable, nodeBundle.bodyBytes[j], nodeBundle.bodyBytes[j+1]);
+            }
+            sprintf(bitmapTable, "%s\\\\ \\hline \n\
+            \t", bitmapTable);
+            // Body bitmap table data
+            for(int j = 0; j < nodeBundle.numBody -1; j++){
+                sprintf(bitmapTable, "%s&\t%d", bitmapTable, nodeBundle.countBodyBytes[j]);
+            }
+
+            sprintf(bitmapTable, "%s\\\\ \\hline \n\
+    \\end{tabular}\n", bitmapTable);
+
+            // Manifest bitmap table headers
+            sprintf(bitmapTable, "%s\
+    \\begin{tabular}{|", bitmapTable);
+            for(int j = 0; j < nodeBundle.numManifest; j++){
+                sprintf(bitmapTable, "%sl|", bitmapTable);
+            }
+            sprintf(bitmapTable, "%s}\n\
+        \\hline\n\
+        \\textbf{Manifest}\t", bitmapTable);
+            for (int j = 0; j < nodeBundle.numManifest -1; j++){
+                sprintf(bitmapTable, "%s&\t\\textbf{%d, %d}\t", bitmapTable, nodeBundle.manifestBytes[j], nodeBundle.manifestBytes[j+1]);
+            }
+            sprintf(bitmapTable, "%s\\\\ \\hline \n\
+            \t", bitmapTable);
+            // Manifest bitmap table data
+            for(int j = 0; j < nodeBundle.numManifest -1; j++){
+                sprintf(bitmapTable, "%s\t&\t%d", bitmapTable, nodeBundle.countManifestBytes[j]);
+            }
+
+            sprintf(bitmapTable, "%s\\\\ \\hline\n\
+    \\end{tabular}\n", bitmapTable);
+            fputs(bitmapTable, latexFile);
+        }
+
+        char *bitmapEnd = "\
+\\end{table}\n\\hrulefill \\linebreak\n\n";
+        fputs(bitmapEnd, latexFile);
+    }
     // ============== Adding Minor Events
     //printf("%s has %d minor events\n", ev.transferDetails, ev.numMinorEvents);
     for (int i = 0; i < ev.numMinorEvents; i++){
@@ -705,11 +750,10 @@ void renderLATEXFile(){
     // Render latex file here
     char renderPDF[200];
     printf("Rendering LaTeX PDF\n");
-    sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex &>/dev/null", outputFolder, outputFolder);
+    sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex", outputFolder, outputFolder);
     system(renderPDF);
     printf("Finished rendering LaTeX PDF\n");
 
-    // Do NOT clean images if just creating a TeX file, as then it can't compile
     if(cleanOldFiles){
         // Remove all excess images after rendering
         char imageFilename[250] = "";
@@ -982,7 +1026,6 @@ void writeRhizomeSendPacket(char line[]){
     if (strstr(line, "Attempting to queue mdp packet from") && ! strstr(line, "broadcast")){
         // We need to get the destination of a packet. That's all this bit is
         // broadcast ones are to anyone on the network, not super relevant. We're kinda just ignoring it
-        // TODO: Add this to a broadcast WIFI event later
         if(outputType >= OUT_ASCII){
             char tempMsg[300] = "";
             //DEBUG:[584836] 15:23:17.870 overlay_mdp.c:817:_overlay_send_frame()  {mdprequests} Attempting to queue mdp packet from 8AEF473837C24E56ADD9C864228A0B453BF70161639D851A5FBC150E15977052:18 to 2BEF74429C78AEB1347B6182E8689F9B9644EDF74379D7C0635F5649D85A2F39:18
@@ -1212,6 +1255,7 @@ void writeLBARDBundle(char line[]){
     char tmp[100];
     char details[500];
     char t = '=';
+    char longBID[65] = "";
 
     if (!strstr(line, ">>>")){
         //printf("Bad line: %s\n", line);        
@@ -1225,7 +1269,6 @@ void writeLBARDBundle(char line[]){
         printf("No timestamp for line: \n", line);
         return;
     }
-    char longBID[65] = "";
 
     if (strstr(line, "We have new bundle")){
         // We have new bundle EB7E8ABC39C548D939C5AB1E0015B7D5389D7C3FFBD1BE44439DC7C0A5F6730C/1596604638358
@@ -1320,17 +1363,13 @@ void writeLBARDBundle(char line[]){
             struct Events currentEvent;
             currentEvent.sendingNode = msgSend;
             currentEvent.eventType = 'F';
-            currentEvent.hasBitmap = 0;
-            strcpy(currentEvent.bitmapBID, longBID);
-
+            currentEvent.hasBitmap = 1;
+            strcpy(currentEvent.bitmapBID, msgBidLong);
             int startBytes = -1;
             int endBytes = -1;
             sscanf(msgByteVals, "[%d,%d)", &startBytes, &endBytes);
 
-            // Add the bytes to the overall bundle info
-            // This allows us to have an breakdown of what pieces the node has
-            //int destNodeInt = msgDest - 65;
-            currentEvent = calculateBitmapPartitions(msgType, msgSend, startBytes, endBytes, currentEvent);
+
 
 
             strcpy(currentEvent.majorTime, timeStamp);
@@ -1339,6 +1378,10 @@ void writeLBARDBundle(char line[]){
             strcpy(currentEvent.transferDetails, msgDot);
             // printf("[%s] %c -> %c | %s\n", timeStamp, msgSend, msgDest, currentEvent.transferDetails);
             currentEvent.numMinorEvents = 0;
+            // Add the bytes to the overall bundle info
+            // This allows us to have an breakdown of what pieces the node has
+            //int destNodeInt = msgDest - 65;
+            currentEvent = calculateBitmapPartitions(msgType, msgSend, startBytes, endBytes, currentEvent);
             listEvents[currentEventIndex] = currentEvent;
             currentEventIndex += 1;
             addToMinorEvents(msg);
@@ -1685,7 +1728,7 @@ Events calculateBitmapPartitions(char msgType[50], char msgSend, int startBytes,
         }
     }
     for(int i = 0; i < numNodeNeighbours; i++){
-        int destNodeInt = nodeNeighbours[i] - 65;
+        int destNodeInt = nodeNeighbours[i] - 64;
 
         if (strcmp(msgType, "manifest") == 0){
             // Append to the array for this node
@@ -1760,6 +1803,114 @@ Events calculateBitmapPartitions(char msgType[50], char msgSend, int startBytes,
     ev.numDestinations = numNodeNeighbours;
     strcpy(ev.destinationNode, nodeNeighbours);
     return ev;
+}
+
+Bundle calculateBitmapCounts(Events ev, Bundle bd){
+    // Sort the body and manifest arrays
+    qsort(bd.bodyBytes, bd.numBody, sizeof(int), intComparator);
+    qsort(bd.manifestBytes, bd.numManifest, sizeof(int), intComparator);
+
+    // Often the bitmap is in 128 bytes multiples as that is what LBARD likes to send
+    // However we want a granularity of 64 bytes, so we must add them in. 
+    bd = addBitmap64Multiples(bd, bd.manifestBytes, bd.numManifest, 2);
+    bd = addBitmap64Multiples(bd, bd.bodyBytes, bd.numBody, 1);
+
+    // printf("sorted manifest bytes: ");
+    // for(int i=0; i<bd.numManifest; i++){
+    //     printf("%d, ",bd.manifestBytes[i]);
+    // }
+    // printf("\n");
+
+    if (ev.hasBitmap == 1){
+        // Manifest
+        int index = -1;
+        for(int i = 0; i < bd.numManifest; i++){
+            if (bd.manifestBytes[i] == ev.bitmapStartBytes){
+                index = i;
+                break;
+            }
+        }
+        if (index >= 0){
+            while (bd.manifestBytes[index] != ev.bitmapEndBytes){
+                bd.countManifestBytes[index] += 1;
+                index++;
+            }
+        }else{
+            printf("Could not find manifest startByte value of %d\n", ev.bitmapStartBytes);
+            printf("Values: ");
+            for(int i = 0; i < bd.numManifest; i++){
+                printf("%d, ", bd.manifestBytes[i]);
+            }
+            printf("\t Length: %d\n", bd.numManifest);
+            exit(1);
+        }
+    }else if (ev.hasBitmap == 2){
+        // Body
+        int index = -1;
+        for(int i = 0; i < bd.numBody; i++){
+            if (bd.bodyBytes[i] == ev.bitmapStartBytes){
+                index = i;
+                break;
+            }
+        }
+        if (index >= 0){
+            while (bd.bodyBytes[index] != ev.bitmapEndBytes){
+                bd.countBodyBytes[index] += 1;
+                index++;
+            }
+        }else{
+            printf("Could not find body startByte value of %d\n", ev.bitmapStartBytes);
+            printf("Values: ");
+            for(int i = 0; i < bd.numBody; i++){
+                printf("%d, ", bd.bodyBytes[i]);
+            }
+            printf("\t Length: %d\n", bd.bodyBytes);
+            exit(1);
+        }
+    }else{
+        printf("invalid bitmap value\n");
+    }
+    return bd;
+}
+
+Bundle addBitmap64Multiples(Bundle bd, int byteArray[], int numPartitions, int bitmapType){
+    // Add the 64 byte multiple boundaries that are missing
+    int maxNum = numPartitions;
+    int maxByteValue = byteArray[numPartitions -1];
+    int indexOffset = 0;
+    for(int i = 0; i < maxNum; i++){
+        int index = i + indexOffset;
+        if (i *64 >= maxByteValue){
+            // We don't want to add boundaries greater than the maximum sent boundary
+            break;
+        }
+        // printf("compare: %d | %d [%d] \n", byteArray[index], i *64, i);
+
+        if (byteArray[index] != i * 64){
+            // If it doesn't match the 64-byte value at this point
+            byteArray[numPartitions] = i * 64;
+            numPartitions += 1;
+            // Allows us to keep a running total of the proper multiples of 64
+            // while still continuing throughout the array
+            indexOffset--;
+            maxNum++;
+        }
+    }
+    if (indexOffset != 0){
+        // Then we've clearly altered something in the original array
+        // Simply copy the arrays BACK into the original
+        // Then sort them
+        if (bitmapType == 2){
+            memcpy(bd.manifestBytes, byteArray, numPartitions * sizeof(int));
+            bd.numManifest = numPartitions;
+            qsort(bd.manifestBytes, bd.numManifest, sizeof(int), intComparator);
+        }else if (bitmapType == 1){
+            memcpy(bd.bodyBytes, byteArray, numPartitions * sizeof(int));
+            bd.numBody = numPartitions;
+            qsort(bd.bodyBytes, bd.numBody, sizeof(int), intComparator);
+        }
+    }
+    return bd;
 }
 
 /**
@@ -1907,7 +2058,7 @@ void registerBundle(char line[]){
     numBIDs += 1;
 }
 
-int getBIDNumber(char bid[]){
+int getBIDNumber(const char bid[]){
     char shortBID[20] = "";
     for(int i = 0; i < numBIDs; i++){
         shortenBID(bid, shortBID);
