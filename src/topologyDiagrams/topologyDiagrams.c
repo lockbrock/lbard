@@ -17,7 +17,20 @@ enum OutputFormat{
     OUT_TEX = 5,
     OUT_PDF = 6,
 };
+char listOutputNames[8][25] = {
+    "None",
+    "ASCII",
+    "ASCII, major only",
+    ".dot",
+    ".png",
+    ".tex",
+    ".pdf"
+};
+
 int outputType = 0;
+int outputEachBadLine = 0;
+int inputLineNumber = 1;
+int isVerboseOutput = 0;
 int cleanOldFiles = 1;  // Remove all files that are used to build the output format by default
 int isEmulation = 0; // Controls if we use fakeradio or LBARD major events, set by detection of fakeradio
 char outputFolder[150] = "";
@@ -26,6 +39,21 @@ char outputFilename[150] = "";
 struct TestDetails testDetails;
 
 int numBIDs = 0;
+int numBadLines = 0;
+
+static struct option long_options[] = {
+    {"dot", no_argument, NULL, OUT_DOT},
+    {"ascii", no_argument, &outputType, OUT_ASCII},
+    {"asciiMajor", no_argument, &outputType, OUT_ASCII_MAJOR},
+    {"images", no_argument, &outputType, OUT_IMAGES},
+    {"tex", no_argument, &outputType, OUT_TEX},
+    {"pdf", no_argument, &outputType, OUT_PDF},
+    {"noclean", no_argument, &cleanOldFiles, 0},
+    {"badlines", no_argument, &outputEachBadLine, 1},
+    {"help", no_argument, NULL, 'h'},
+    {"verbose", no_argument, &isVerboseOutput, 1},
+    {NULL, 0, NULL, 0}
+};
 
 int main(int argc, char **argv){
     // =============== Process arguments
@@ -33,36 +61,52 @@ int main(int argc, char **argv){
         fprintf(stderr, "Invalid number of arguments.\n");
         usage();
         exit(-1);
-    }else if (argc >= 4){
-        if (strcmp(argv[3], "dot") == 0){
-            outputType = OUT_DOT;
-        }else if (strcmp(argv[3], "ascii") == 0){
-            outputType = OUT_ASCII;
-        }else if (strcmp(argv[3], "asciiMajor") == 0){
-            outputType = OUT_ASCII_MAJOR;
-        }else if (strcmp(argv[3], "images") == 0){
-            outputType = OUT_IMAGES;
-        }else if (strcmp(argv[3], "tex") == 0){
-            outputType = OUT_TEX;
-        }else if (strcmp(argv[3], "pdf") == 0){
-            outputType = OUT_PDF;
-        }else{
-            fprintf(stderr, "Invalid option: %s\n", argv[3]);
-            usage();
-            exit(-1);
+    }
+    char ch;
+    int option_index = 0;
+    while ((ch = getopt_long(argc, argv, "daAitpnbhv", long_options, &option_index))){
+        if (ch == -1){
+            break;
         }
-        if (argc >= 5){
-            if (strcmp(argv[4], "noclean") == 0){
+        switch(ch){
+            case '0':
+                break;
+            case 'd':
+                outputType = OUT_DOT;
+                break;
+            case 'a':
+                outputType = OUT_ASCII;
+                break;
+            case 'A':
+                outputType = OUT_ASCII_MAJOR;
+                break;
+            case 'i':
+                outputType = OUT_IMAGES;
+                break;
+            case 't':
+                outputType = OUT_TEX;
+                break;
+            case 'p':
+                outputType = OUT_PDF;
+                break;
+            case 'n':
                 cleanOldFiles = 0;
-            }else{
+                break;
+            case 'b':
+                outputEachBadLine = 1;
+                break;
+            case 'v':
+                isVerboseOutput = 1;
+                break;
+            case '?':
+            case 'h':
+            default:
                 usage();
                 exit(-1);
-            }
         }
     }
-
-    strcpy(inputFilename, argv[1]);
-    strcpy(outputFolder, argv[2]);
+    strcpy(inputFilename, argv[optind]);
+    strcpy(outputFolder, argv[optind+1]);
 
     int endOutputFolder = strlen(outputFolder);
 
@@ -72,13 +116,14 @@ int main(int argc, char **argv){
     }
     sprintf(outputFilename, "%ssimpleLog.txt", outputFolder);    
 
+    printf("Running with options:\n");
 
     if ((fptr = fopen(inputFilename,"r")) == NULL){
         fprintf(stdout, "Error opening log file: %s\n", inputFilename);
         // Program exits if the file pointer returns NULL.
         exit(1);
     }else{
-        fprintf(stdout, "\nInput file: %s\n", inputFilename);
+        fprintf(stdout, "\tInput file: \t\t%s\n", inputFilename);
     }
 
     if ((outputFile = fopen(outputFilename,"w")) == NULL){
@@ -87,8 +132,21 @@ int main(int argc, char **argv){
         usage();
         exit(1);
     }else{
-        fprintf(stdout, "Output file: %s\n\n", outputFilename);
+        fprintf(stdout, "\tOutput folder: \t\t%s\n", outputFolder);
+        fprintf(stdout, "\tSimple log output: \t%s\n", outputFilename);
     }
+    printf("\tOutput type: \t\t%s\n", listOutputNames[outputType]);
+
+    if (!cleanOldFiles){
+        printf("\tBuild files:\t\tKeep\n");
+    }else{
+        printf("\tBuild files:\t\tDelete\n");
+    }
+    if (isVerboseOutput){
+        printf("\tVerbose: \t\ttrue\n");
+    }
+    printf("\n");
+
     if (outputType >= OUT_DOT){
         fprintf(stdout, "Creating a simple log file and dot files\n\n");
     }
@@ -114,6 +172,11 @@ int main(int argc, char **argv){
 
     }else{
         printf("Finished creating simple log.\n");
+        if (numBadLines > 0){
+            float percent;
+            percent = (float)numBadLines/ inputLineNumber * 100.0;
+            printf("%d malformed lines were encountered (%0.3f\%)\n", numBadLines, percent);
+        }
     }
 
     return 0;
@@ -123,19 +186,27 @@ int main(int argc, char **argv){
  *  Called when malformed arguments are passed to the program
  */
 void usage(){
-    char *msg = "\n\
-Syntax: topologyDiagrams <input file> <output folder> [createDot|createImage|createPDF] [noclean]\n\n\
-    input file:     path to the log file to be simplified \n\
-    output folder:  the folder where all outputs will be saved.\n\n\
-    ascii:          optional: create a pipeable ASCII representation of the traffic\n\
-    asciiMajor:     optional: create a pipeable ASCII representation of the traffic but only\n\
-                    outputting the major events\n\
-    dot:            optional: specifies if dot files are to be made\n\
-    images:         optional: specifies if images are to be made\n\
-    tex:            optional: creates an output LaTex file but does NOT render it and never deletes images\n\
-    pdf:            optional: specifies if a PDF is to be made\n\n\
-    noclean:        optional: don't delete files. ie. if rendering images\n\
-                    then don't delete the DOT files";
+    char *msg = "\
+Usage: topologyDiagrams <input file> <output folder> [OUTPUT] [OPTIONS]\n\
+    input file:       path to the log file to be simplified \n\
+    output folder:    the folder where all outputs will be saved.\n\n\
+\n\
+Outputs (Optional):\n\
+  -a  --ascii       Output an ASCII representation of network traffic including bundle bitmaps\n\
+  -A  --asciiMajor  Same as above but with only major events\n\
+  -d  --dot         Create n dot files of major events showing network traffic and topology\n\
+  -i  --images      Create n images of major events showing network traffic and topology\n\
+  -t  --tex         Create a LaTeX file but does NOT render it and never deletes images\n\
+  -p  --pdf         Create a single PDF of all network traffic, minor events, and bitmaps\n\
+  Only the last output selected will be used.\n\
+  If no output is selected, will just create a simple log file\n\
+\n\
+Options:\n\
+  -n  --noclean     Do not delete any non-final files created (ie. do not delete images when creating a PDF)\n\
+  -b  --badlines    Display any invalid/bad lines encountered during processing\n\
+  -v  --verbose     Output more during the processing and generation of outputs. Useful if \n\
+                    PDF generation hangs (may be a broken .tex file)\n\
+  -h  --help        Display this help message and exit\n";
     fprintf(stderr, "%s\n", msg);
 }
 
@@ -203,14 +274,23 @@ void createSimpleLog(){
                     writeLBARDSync(buffer);
                     break;
                 case -1:
-                    printf("Error processing line: %s", buffer);
                     break;
                 default:
-                    printf("Did not find a match for line: %s", buffer);
+                    reportBadLine(buffer, "Unable to match");
                     writeLineToLog(buffer);
             }
         }
+        inputLineNumber += 1;
     }
+    // Add a count of bundles and SIDs
+    if (numBIDs > 0){
+        char numberBids[50] = "";
+        setupLineNumber += 1;
+        // printf("setup line num: %d | numbids: %d\n", setupLineNumber, numBIDs);
+        // sprintf(numberBids, "#%03d There were %d unique BID(s) in this test\n", setupLineNumber, numBIDs);
+        writeLineToLog(numberBids);
+    }
+
     fclose(fptr);
     fclose(outputFile);
     char sortCommand[500] = "";
@@ -456,10 +536,13 @@ strict digraph A {\n\
                     createLATEXFile(ev, shortImageName, 0);
                 }
             }
+            float percent;
+            percent = (float)numFile / listEventsLength * 100.0;
+
             if (outputType >= OUT_IMAGES){
-                printf("\rCreated %3d of %d images", numFile, listEventsLength);
+                printf("\rCreated %3d of %d images (%3.0f\%)", numFile, listEventsLength, percent);
             }else{
-                printf("\rCreated %3d of %d DOT files", numFile, listEventsLength);
+                printf("\rCreated %3d of %d DOT files (%3.0f\%)", numFile, listEventsLength, percent);
             }
             fflush(stdout);
             numFile++;
@@ -470,6 +553,9 @@ strict digraph A {\n\
 }
 
 void sortEvents(){
+    if (isVerboseOutput){
+        printf("Sorting the event lists now\n");
+    }
     // Current event index /should/ be at the end
     listEventsLength = currentEventIndex;
     // Sort the major event array
@@ -481,6 +567,9 @@ void sortEvents(){
     int minorEventIndex = 0;
     // All of this is just linking the (now sorted) minor events
     // to the relevant major event
+    if (isVerboseOutput){
+        printf("Linking the minor events to the relevant major event\n");
+    }
     for (int i = 0; i < listEventsLength; i++){
         struct Events ev = listEvents[i];
         char tmpTimeMajor[20] = "";
@@ -512,9 +601,13 @@ void sortEvents(){
         // Now replace it back in the array
         listEvents[i] = ev;
     }
+    // TODO: Check if any minor events occur after the last major event
 }
 
 void printASCII(){
+    if (isVerboseOutput){
+        printf("Printing the ASCII output\n");
+    }
     const int debugBitmapOnly = 0;
     for(int i = 0; i < listEventsLength; i++){
         struct Events ev = listEvents[i];
@@ -605,7 +698,6 @@ int firstLine = 1;
 void createLATEXFile(const struct Events ev, const char *outputImageName, const int isLastEvent){
     char latexFilename[250] = "";
     sprintf(latexFilename, "%sdiagrams.tex", outputFolder);
-
 
     // ============== Open file, setup/import section
     if (firstLine){
@@ -749,19 +841,29 @@ void createLATEXFile(const struct Events ev, const char *outputImageName, const 
 void renderLATEXFile(){
     // Render latex file here
     char renderPDF[200];
-    printf("Rendering LaTeX PDF\n");
-    sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex", outputFolder, outputFolder);
+    printf("Rendering LaTeX PDF\n\t(this /may/ hang if the TeX file is malformed.)\n\tRun with the verbose flag if it does\n");
+    if (isVerboseOutput){
+        sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex", outputFolder, outputFolder);
+    }else{
+        sprintf(renderPDF, "pdflatex --output-directory=%s %sdiagrams.tex &>/dev/null", outputFolder, outputFolder);
+    }
     system(renderPDF);
     printf("Finished rendering LaTeX PDF\n");
 
     if(cleanOldFiles){
         // Remove all excess images after rendering
+        if (isVerboseOutput){
+            printf("Removing image files\n");
+        }
         char imageFilename[250] = "";
         for (int i = 0; i <= listEventsLength; i++){
             sprintf(imageFilename, "%soutput%03d.png", outputFolder, i);
             remove(imageFilename);
         }
         char cleanLatex[200] = "";
+        if (isVerboseOutput){
+            printf("Removing TeX file\n");
+        }
         sprintf(cleanLatex, "rm  %sdiagrams.tex %sdiagrams.aux %sdiagrams.log", outputFolder, outputFolder, outputFolder);
         system(cleanLatex);
     }
@@ -803,6 +905,7 @@ void setProcess(const char proc[]){
  *  May in some cases change the process value depending on the line.
  */
 int isLineRelevant(char line[]){
+    // printf("line: %s", line);
     char tprocess[100] = "";
     char tmp[1000] = "";
     char instance[100] = "";
@@ -929,6 +1032,17 @@ int isLineRelevant(char line[]){
             //18:45:06.376 # executeOk --core-backtrace --timeout=600 --executable=lbard --stdout-file=E_LBARDOUT --stderr-file=E_LBARDERR 127.0.0.1:4114 lbard:lbard 9280164C7615E9E61E954219E39B531BB5CF032EA1BCE6CFF0A21ED517FE1A5A FEC1C61CCE2A2E70FE4135C6463980D907915FDA12F352C2C1A567FB1B35A76A /dev/pts/6 announce pull bundles 
             lbardInitialTime = timestampToLong(line);
         }
+
+        if (strstr(line, ">>>")){
+            char tmpChars[500] = "";
+            sscanf(line, "%s", tmpChars);
+            if (strcmp(tmpChars, ">>>") != 0){
+                reportBadLine(line, "Malformed \">>>\"");
+                return -1;
+            }
+            // Check that >>> is at the start, we have some lines that suffering from issues with 
+        }
+
         if(strstr(line, "HAS some bundle")){
             return LBARD_RECEIVE_PACKET;
         }
@@ -954,13 +1068,13 @@ int isLineRelevant(char line[]){
             return LBARD_NEW_BUNDLE;
         }
         if (strstr(line, "Calling message handler")){
-            return LBARD_NEW_BUNDLE;
+            // return LBARD_NEW_BUNDLE;
         }
         if (strstr(line, "Registering peer")){
             return LBARD_NEW_BUNDLE;
         }
         if (strstr(line, "Decoding message")){
-            return LBARD_NEW_BUNDLE;
+            // return LBARD_NEW_BUNDLE;
         }
         if (strstr(line, "Sending sync message")){
             return LBARD_SYNC_MESSAGE;
@@ -1258,7 +1372,7 @@ void writeLBARDBundle(char line[]){
     char longBID[65] = "";
 
     if (!strstr(line, ">>>")){
-        //printf("Bad line: %s\n", line);        
+        reportBadLine(line, "Missing initial \">>>\"");
         return;
     }
 
@@ -1266,7 +1380,7 @@ void writeLBARDBundle(char line[]){
     if (strlen(timeStamp) != 0){
         fixLBARDTimestamp(timeStamp);
     }else{
-        printf("No timestamp for line: \n", line);
+        reportBadLine(line, "No timestamp");
         return;
     }
 
@@ -1300,6 +1414,25 @@ void writeLBARDBundle(char line[]){
         sscanf(details, "Registering peer %s", tmpSID);
         char nodeChar = getNodeFromSid(tmpSID);
         sprintf(details, "Registering peer %s (Node %c)", tmpSID, nodeChar);
+        if (!isEmulation){
+            // Always put in alphabetical order so we can easily detect duplications
+            if (instanceChar < nodeChar){
+                struct FakeradioLink fl;
+                fl.node1 = instanceChar;
+                fl.node2 = nodeChar;
+                allFakeradioLinks[numFakeradioLinks] = fl;
+                numFakeradioLinks += 1;
+            }else{
+                struct FakeradioLink fl;
+                fl.node1 = nodeChar;
+                fl.node2 = instanceChar;
+                allFakeradioLinks[numFakeradioLinks] = fl;
+                numFakeradioLinks += 1;
+                // Do in oppostite order
+            }
+            printf("%c is a neighbour of %c\n", nodeChar, instanceChar);    
+        }
+
     }
     else if (strstr(line, "Progress receiving")){
         // Progress receiving BID=1f1d0d66ee60aecf* version 1600142462897: manifest is 258 bytes long (RX bitmap fcff), and body 50 bytes long. Bitmap p=    0 : Y
@@ -1369,9 +1502,6 @@ void writeLBARDBundle(char line[]){
             int endBytes = -1;
             sscanf(msgByteVals, "[%d,%d)", &startBytes, &endBytes);
 
-
-
-
             strcpy(currentEvent.majorTime, timeStamp);
             shortenBID(msgBidLong, msgShortBid);
             sprintf(msgDot, "Sent %s piece [%d,%d) of %s*", msgType, startBytes, endBytes, msgShortBid);
@@ -1404,6 +1534,10 @@ void writeLBARDSend(char line[]){
     char tmp[100] = "";
     char details[500] = "";
     sscanf(line, "%s %s %[^\t\n]", &timeStamp, &tmp,  &details);
+    if (strstr(timeStamp, "T+") == 0){
+        reportBadLine(line, "T+ not at the start");
+        return;
+    }
     const char* timestamp = convertLBARDTime(lbardInitialTime, timeStamp);
 
     if (strstr(line, "length of bundle")){
@@ -1424,15 +1558,25 @@ void writeLBARDSend(char line[]){
         shortenBID(longBID, shortBID);
         sprintf(details, "Resending bundle %s* from the start.", shortBID);
     }else if (strstr(details, "has finished receiving")){
+        // printf("line: %s\n", line);
         // SYNC FIN: 49eb1e150256* has finished receiving 5F89FBA833864024 version 1600145057775 (bundle #0)
         char longSID[65] = "";
         char shortSID[65] = "";
         char bid[10] = "";
         char nodeChar = '-';
+        if (!strstr(details, "SYNC FIN")){
+            reportBadLine(line, "Missing \"SYNC FIN\"");
+            return;
+        }
         sscanf(details, "SYNC FIN: %s has finished receiving %s", longSID, bid);
         shortenSID(longSID, shortSID);
         nodeChar = getNodeFromSid(shortSID);
-        sprintf(details, "Node %c (%s) has finished receiving bundle: %s", nodeChar, longSID, bid);
+        if (nodeChar != '-'){
+            sprintf(details, "Node %c (%s) has finished receiving bundle: %s", nodeChar, longSID, bid);
+        }else{
+            reportBadLine(line, "Unable to determine node");
+            return;
+        }
         // Node C (SID) has finished receiving bundle: BID
     }
 
@@ -1573,7 +1717,7 @@ void writeRhizomeLayout(char line[]){
  *  If creating a dot file, additionally save these messages as a major event (ie. a packet transfer) to be
  *  displayed on the dot file produced.
  */
-char timeStamp[20] = "";
+char fakeradioTimeStamp[20] = "";
 char msgDot[256] = "";
 void writeFakeradioBundle(char line[]){
     int bufferLength = 255;
@@ -1590,13 +1734,13 @@ void writeFakeradioBundle(char line[]){
     char endBytes[10] = "";
     char sentBytes[10] = "";
     int startLine = ftell(fptr);
-    memset(timeStamp, 0, strlen(timeStamp));
+    memset(fakeradioTimeStamp, 0, strlen(fakeradioTimeStamp));
     memset(msgDot, 0, strlen(msgDot));
 
 
     //>>> [16:38.12.334 RADIO] @ T+14666ms: 53 bytes, 2 packets, 24 sync bytes, 0 manifest bytes, 0 body bytes, 0 colissions, 26.9% channel utilisation.
-    sscanf(line, "%s %c %[^R]", &tmp, &tmpC, timeStamp);
-    fixLBARDTimestamp(timeStamp);
+    sscanf(line, "%s %c %[^R]", &tmp, &tmpC, fakeradioTimeStamp);
+    fixLBARDTimestamp(fakeradioTimeStamp);
 
     int hasMessage = 0;
     
@@ -1618,16 +1762,16 @@ void writeFakeradioBundle(char line[]){
                     shortenBID(bundleID, shortBID);
 
                     if (strcmp(startBytes, "")){
-                        sprintf(msg, "%sFAKERADIO %c -> %c [partial bundle]  bid=%s* [%s to %s. Total: %s bytes]\n", timeStamp, sendNode, destNode, bundleID, startBytes, endBytes, byteLength);
+                        sprintf(msg, "%sFAKERADIO %c -> %c [partial bundle]  bid=%s* [%s to %s. Total: %s bytes]\n", fakeradioTimeStamp, sendNode, destNode, bundleID, startBytes, endBytes, byteLength);
                         // // The transfer message that will be displayed in the DOT file
                         // sprintf(msgDot, "[partial bundle]  bid=%s [%s to %s. Length: %s bytes]", shortBID, startBytes, endBytes, byteLength);
                     }else{
-                        sprintf(msg, "%sFAKERADIO %c -> %c [bundle piece]  bid=%s* [%s bytes]\n", timeStamp, sendNode, destNode, bundleID, byteLength);
+                        sprintf(msg, "%sFAKERADIO %c -> %c [bundle piece]  bid=%s* [%s bytes]\n", fakeradioTimeStamp, sendNode, destNode, bundleID, byteLength);
                         // // The transfer message that will be displayed in the DOT file
                         // sprintf(msgDot, "[bundle piece] bid=%s [%s bytes]", shortBID, byteLength);
                     }
                 }else{
-                    sprintf(msg, "%sFAKERADIO %c -> %c [%s] [%s bytes]\n", timeStamp, sendNode, destNode, messageType, byteLength);
+                    sprintf(msg, "%sFAKERADIO %c -> %c [%s] [%s bytes]\n", fakeradioTimeStamp, sendNode, destNode, messageType, byteLength);
                     // The transfer message that will be displayed in the DOT file
                     sprintf(msgDot, "[%s] [%s bytes]", messageType, byteLength);
                     // printf("fakeradio event: %s \n", msg);
@@ -1644,7 +1788,7 @@ void writeFakeradioBundle(char line[]){
                         currentEvent.hasBitmap = 0;
                         currentEvent.eventType = 'F';
                         currentEvent.numMinorEvents = 0;
-                        strcpy(currentEvent.majorTime, timeStamp);
+                        strcpy(currentEvent.majorTime, fakeradioTimeStamp);
                         strcpy(currentEvent.transferDetails, msgDot);
                         listEvents[currentEventIndex] = currentEvent;
                         currentEventIndex += 1;
@@ -2018,6 +2162,7 @@ long timestampToLong(char timeStamp[20]){
  *  off of its SID.
  */
 char getNodeFromSid(char sid[]){
+    // printf("received sid: %s\n", sid);
     // Convert to upper just in case
     if (strlen(sid) == 0){
         fprintf(stderr, "Received an empty SID\n");
@@ -2056,6 +2201,9 @@ void registerBundle(char line[]){
     }
     strcpy(listBids[numBIDs], line);
     numBIDs += 1;
+    if (isVerboseOutput){
+        printf("Registered a new BID (%d): %s\n", numBIDs, line);
+    }
 }
 
 int getBIDNumber(const char bid[]){
@@ -2074,6 +2222,11 @@ int getBIDNumber(const char bid[]){
  *  Utility function. Allows us to easily add lines to the minor event list
  */
 void addToMinorEvents(const char line[]){
+    if (strlen(line) == 0){
+        // printf("======= EMPTY MINOR EVENT ===\n");
+        return;
+    }
+    // printf("adding to minor event: %s\n", line);
     char timestamp[20] = "";
     char restOfMessage[256] = "";
     sscanf(line, "%s %[^\t\n]", timestamp, restOfMessage);
@@ -2160,4 +2313,17 @@ int intComparator (const void * a, const void * b) {
  */
 void writeLineToLog(char line[]){
     fputs(line, outputFile);
+}
+
+void reportBadLine(char line[], char reason[]){
+    char *indexNewline = NULL;
+    indexNewline = strstr(line, "\n");
+    if (indexNewline != NULL){
+        *indexNewline = ' ';
+    }
+    if (outputEachBadLine){
+        fprintf(stderr, "Error [%d]: %s: \"%s\"\n", inputLineNumber, reason, line);
+    }
+    // TODO: Add display at the end showing how many malformed/bad lines were encountered
+    numBadLines +=1;
 }

@@ -7,6 +7,7 @@
 #include <time.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <getopt.h>
 
 
 // ============= TEST DETAILS
@@ -193,3 +194,5 @@ int minorEventSort(const void* a, const void* b);
 int intComparator (const void * a, const void * b);
 
 void writeLineToLog(char line[]);
+
+void reportBadLine(char line[], char reason[]);
